@@ -2,7 +2,7 @@
 """
 Gmail Email Classifier Agent
 
-An agentic application using AWS Bedrock to automatically read and label Gmail emails
+An agentic application using LLM providers to automatically read and label Gmail emails
 based on predefined categories.
 """
 
@@ -30,7 +30,7 @@ def main():
     os.environ["ANONYMIZED_TELEMETRY"] = "false"
     """Main entry point for the email classifier agent."""
     parser = argparse.ArgumentParser(
-        description='Gmail Email Classifier Agent using AWS Bedrock'
+        description='Gmail Email Classifier Agent with multi-LLM provider support'
     )
     parser.add_argument(
         '--log-level',
