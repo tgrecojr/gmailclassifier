@@ -1,0 +1,12 @@
+{
+  "labels": [
+    "Work",
+    "Personal",
+    "Finance",
+    "Shopping",
+    "Travel",
+    "Social",
+    "Newsletters"
+  ],
+  "classification_prompt": "Your task is to categorize the email according to the following labels.\n\nWork - Work-related emails, meetings, professional communications, project updates, and business correspondence\nPersonal - Personal emails from friends and family, social invitations, personal appointments\nFinance - Bank statements, credit card bills, investment updates, tax documents, payment confirmations\nShopping - Order confirmations, shipping notifications, product recommendations, promotional emails from retailers\nTravel - Flight confirmations, hotel bookings, rental car reservations, travel itineraries, travel deals\nSocial - Social media notifications, friend requests, event invitations from social platforms\nNewsletters - Subscribed newsletters, blog updates, industry news, educational content\n\nOne email can have more than one label. Return only label names in JSON format, nothing else. Do not make things up."
+}

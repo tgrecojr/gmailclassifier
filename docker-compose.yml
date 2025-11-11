@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  gmail-classifier:
+    build: .
+    container_name: gmail-classifier
+    restart: unless-stopped
+
+    # Mount credentials, token, and config as secrets
+    volumes:
+      - ./credentials.json:/app/credentials.json:ro
+      - ./token.json:/app/token.json:ro
+      - ./classifier_config.json:/app/classifier_config.json:ro
+      - ./data:/app/data
+
+    # Load environment variables from .env file
+    env_file:
+      - .env
+
+    environment:
+      - GMAIL_HEADLESS_MODE=true
+      - LOG_LEVEL=INFO
+
+    # Optional: Set resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          memory: 256M
