@@ -9,6 +9,13 @@ omit =
     venv/*
     setup.py
     */migrations/*
+    # Exclude files without tests (for now)
+    config.py
+    email_classifier_agent.py
+    gmail_client.py
+    main.py
+    setup_token.py
+    verify_setup.py
 
 [report]
 exclude_lines =

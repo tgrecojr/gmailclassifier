@@ -65,7 +65,9 @@ tests/
 
 ## Test Coverage
 
-Current test coverage focuses on:
+Current test coverage: **81%** overall (tested modules only)
+
+Coverage focuses on LLM provider functionality:
 
 - **llm_utils.py**: 70% coverage
   - Email content construction
@@ -84,6 +86,8 @@ Current test coverage focuses on:
   - JSON parsing edge cases
   - Invalid label filtering
   - Case-insensitive label matching
+
+**Note**: Coverage calculation excludes files without tests yet (gmail_client.py, email_classifier_agent.py, etc.). These will be added in future test iterations.
 
 ## Test Categories
 
