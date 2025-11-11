@@ -2,10 +2,15 @@
 Anthropic Direct API LLM Provider implementation.
 """
 
-import json
 import logging
 from typing import List, Dict
 from llm_provider import LLMProvider
+from llm_utils import (
+    construct_email_content,
+    construct_classification_prompt,
+    parse_labels_from_response,
+    log_classification_result
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,25 +55,13 @@ class AnthropicProvider(LLMProvider):
             List of applicable label names
         """
         try:
-            # Construct the prompt with email content
-            email_content = f"""
-Subject: {email.get('subject', 'No Subject')}
-From: {email.get('from', 'Unknown')}
-Date: {email.get('date', 'Unknown')}
-
-Body:
-{email.get('body', email.get('snippet', 'No content'))}
-"""
-
-            full_prompt = f"""{classification_prompt}
-
-Available labels: {', '.join(available_labels)}
-
-Email to classify:
-{email_content}
-
-Respond with ONLY a JSON object containing a "labels" array with the applicable label names. Example: {{"labels": ["Work", "Urgent"]}}
-"""
+            # Construct email content and full prompt using shared utilities
+            email_content = construct_email_content(email)
+            full_prompt = construct_classification_prompt(
+                classification_prompt,
+                available_labels,
+                email_content
+            )
 
             # Call Anthropic API
             response = self.client.messages.create(
@@ -86,60 +79,17 @@ Respond with ONLY a JSON object containing a "labels" array with the applicable 
             # Extract text from response
             response_text = response.content[0].text
 
-            # Parse the response to extract labels
-            labels = self._parse_labels_from_response(response_text, available_labels)
+            # Parse the response using shared utility
+            labels = parse_labels_from_response(response_text, available_labels)
 
-            logger.info(f"Classified email '{email.get('subject', 'No Subject')}' with labels: {labels}")
+            # Log result
+            log_classification_result(email, labels, "Anthropic")
+
             return labels
 
-        except Exception as e:
-            logger.error(f"Error classifying email with Anthropic: {e}")
-            return []
-
-    def _parse_labels_from_response(self, response: str, available_labels: List[str]) -> List[str]:
-        """
-        Parse labels from the model response.
-
-        Args:
-            response: Raw response from the model
-            available_labels: List of valid label names
-
-        Returns:
-            List of applicable labels
-        """
-        try:
-            # Try to find JSON in the response
-            response = response.strip()
-
-            # If response starts with ```json, remove the code block markers
-            if response.startswith('```'):
-                lines = response.split('\n')
-                response = '\n'.join(lines[1:-1]) if len(lines) > 2 else response
-
-            # Parse JSON
-            data = json.loads(response)
-
-            # Extract labels
-            if isinstance(data, dict) and 'labels' in data:
-                labels = data['labels']
-            elif isinstance(data, list):
-                labels = data
-            else:
-                logger.warning(f"Unexpected response format: {response}")
-                return []
-
-            # Validate labels against available labels
-            valid_labels = [label for label in labels if label in available_labels]
-
-            if len(valid_labels) != len(labels):
-                invalid = set(labels) - set(valid_labels)
-                logger.warning(f"Model returned invalid labels: {invalid}")
-
-            return valid_labels
-
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON from response: {response}. Error: {e}")
+        except ImportError:
+            logger.error("anthropic package not installed. Install with: pip install anthropic")
             return []
         except Exception as e:
-            logger.error(f"Error parsing labels: {e}")
+            logger.error(f"Error classifying email with Anthropic: {e}", exc_info=True)
             return []
