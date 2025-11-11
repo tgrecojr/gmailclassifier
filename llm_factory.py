@@ -34,29 +34,24 @@ def create_llm_provider(config) -> LLMProvider:
             region=config.AWS_REGION,
             model_id=config.BEDROCK_MODEL_ID,
             aws_access_key_id=config.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY
+            aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY,
         )
 
     elif provider_type == "anthropic":
         if not config.ANTHROPIC_API_KEY:
             raise ValueError("ANTHROPIC_API_KEY is required for Anthropic provider")
         return AnthropicProvider(
-            api_key=config.ANTHROPIC_API_KEY,
-            model=config.ANTHROPIC_MODEL
+            api_key=config.ANTHROPIC_API_KEY, model=config.ANTHROPIC_MODEL
         )
 
     elif provider_type == "openai":
         if not config.OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is required for OpenAI provider")
-        return OpenAIProvider(
-            api_key=config.OPENAI_API_KEY,
-            model=config.OPENAI_MODEL
-        )
+        return OpenAIProvider(api_key=config.OPENAI_API_KEY, model=config.OPENAI_MODEL)
 
     elif provider_type == "ollama":
         return OllamaProvider(
-            model=config.OLLAMA_MODEL,
-            base_url=config.OLLAMA_BASE_URL
+            model=config.OLLAMA_MODEL, base_url=config.OLLAMA_BASE_URL
         )
 
     else:

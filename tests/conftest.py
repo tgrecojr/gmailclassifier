@@ -13,7 +13,7 @@ TEST_EMAIL = {
     "subject": "AWS Billing Alert",
     "from": "aws-billing@amazon.com",
     "date": "2025-01-11",
-    "body": "Your AWS bill for January is $50.00. Visit the billing dashboard for details."
+    "body": "Your AWS bill for January is $50.00. Visit the billing dashboard for details.",
 }
 
 TEST_LABELS = ["AWS", "Finance", "Work", "Personal"]
@@ -48,7 +48,9 @@ class MockResponses:
     def bedrock_success() -> Dict:
         """Mock successful Bedrock response."""
         return {
-            'body': Mock(read=lambda: b'{"content": [{"text": "{\\"labels\\": [\\"AWS\\", \\"Finance\\"]}"}]}')
+            "body": Mock(
+                read=lambda: b'{"content": [{"text": "{\\"labels\\": [\\"AWS\\", \\"Finance\\"]}"}]}'
+            )
         }
 
     @staticmethod
@@ -74,18 +76,14 @@ class MockResponses:
     @staticmethod
     def ollama_success() -> Dict:
         """Mock successful Ollama response."""
-        return {
-            'message': {
-                'content': '{"labels": ["AWS", "Finance"]}'
-            }
-        }
+        return {"message": {"content": '{"labels": ["AWS", "Finance"]}'}}
 
     @staticmethod
     def response_with_markdown() -> str:
         """Mock response with markdown code block."""
-        return '''```json
+        return """```json
 {"labels": ["AWS", "Finance"]}
-```'''
+```"""
 
     @staticmethod
     def response_with_text() -> str:

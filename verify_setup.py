@@ -10,10 +10,10 @@ import sys
 from pathlib import Path
 
 # ANSI color codes for terminal output
-GREEN = '\033[92m'
-RED = '\033[91m'
-YELLOW = '\033[93m'
-RESET = '\033[0m'
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+RESET = "\033[0m"
 
 
 def check_file_exists(filepath: str, name: str) -> bool:
@@ -41,27 +41,31 @@ def check_python_version() -> bool:
     """Check Python version."""
     version = sys.version_info
     if version.major == 3 and version.minor >= 11:
-        print(f"{GREEN}✓{RESET} Python version: {version.major}.{version.minor}.{version.micro}")
+        print(
+            f"{GREEN}✓{RESET} Python version: {version.major}.{version.minor}.{version.micro}"
+        )
         return True
     else:
-        print(f"{RED}✗{RESET} Python version {version.major}.{version.minor}.{version.micro} (requires 3.11+)")
+        print(
+            f"{RED}✗{RESET} Python version {version.major}.{version.minor}.{version.micro} (requires 3.11+)"
+        )
         return False
 
 
 def check_dependencies() -> bool:
     """Check if required packages are installed."""
     required_packages = [
-        'google.auth',
-        'google_auth_oauthlib',
-        'googleapiclient',
-        'boto3',
-        'dotenv'
+        "google.auth",
+        "google_auth_oauthlib",
+        "googleapiclient",
+        "boto3",
+        "dotenv",
     ]
 
     all_installed = True
     for package in required_packages:
         try:
-            __import__(package.replace('-', '_'))
+            __import__(package.replace("-", "_"))
             print(f"{GREEN}✓{RESET} Package installed: {package}")
         except ImportError:
             print(f"{RED}✗{RESET} Package NOT installed: {package}")
@@ -77,7 +81,9 @@ def check_aws_credentials() -> bool:
         from botocore.exceptions import ClientError, NoCredentialsError
 
         # Try to create a Bedrock client
-        client = boto3.client('bedrock-runtime', region_name=os.getenv('AWS_REGION', 'us-east-1'))
+        client = boto3.client(
+            "bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1")
+        )
 
         # Try to list available models (this will fail if credentials are wrong)
         print(f"{GREEN}✓{RESET} AWS credentials are valid")
@@ -87,11 +93,13 @@ def check_aws_credentials() -> bool:
         print(f"{RED}✗{RESET} AWS credentials not found")
         return False
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == 'UnrecognizedClientException':
+        error_code = e.response["Error"]["Code"]
+        if error_code == "UnrecognizedClientException":
             print(f"{RED}✗{RESET} AWS credentials are invalid")
         else:
-            print(f"{YELLOW}⚠{RESET} AWS credentials found but couldn't verify Bedrock access: {error_code}")
+            print(
+                f"{YELLOW}⚠{RESET} AWS credentials found but couldn't verify Bedrock access: {error_code}"
+            )
         return False
     except Exception as e:
         print(f"{YELLOW}⚠{RESET} Could not verify AWS credentials: {str(e)}")
@@ -121,6 +129,7 @@ def main():
     # Check environment variables
     print("3. Environment Variables")
     from dotenv import load_dotenv
+
     load_dotenv()
 
     checks.append(check_env_variable("AWS_REGION"))

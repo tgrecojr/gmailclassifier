@@ -9,7 +9,7 @@ from llm_utils import (
     construct_email_content,
     construct_classification_prompt,
     parse_labels_from_response,
-    log_classification_result
+    log_classification_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,7 @@ class OpenAIProvider(LLMProvider):
         """
         try:
             import openai
+
             self.client = openai.OpenAI(api_key=api_key)
             self.model = model
             logger.info(f"Initialized OpenAI provider with model: {model}")
@@ -38,10 +39,7 @@ class OpenAIProvider(LLMProvider):
             )
 
     def classify_email(
-        self,
-        email: Dict,
-        classification_prompt: str,
-        available_labels: List[str]
+        self, email: Dict, classification_prompt: str, available_labels: List[str]
     ) -> List[str]:
         """
         Classify an email using OpenAI API.
@@ -58,9 +56,7 @@ class OpenAIProvider(LLMProvider):
             # Construct email content and full prompt using shared utilities
             email_content = construct_email_content(email)
             full_prompt = construct_classification_prompt(
-                classification_prompt,
-                available_labels,
-                email_content
+                classification_prompt, available_labels, email_content
             )
 
             # Call OpenAI API
@@ -69,16 +65,13 @@ class OpenAIProvider(LLMProvider):
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an email classification assistant. Respond only with valid JSON."
+                        "content": "You are an email classification assistant. Respond only with valid JSON.",
                     },
-                    {
-                        "role": "user",
-                        "content": full_prompt
-                    }
+                    {"role": "user", "content": full_prompt},
                 ],
                 temperature=0.1,  # Low temperature for more deterministic classification
                 max_tokens=1000,
-                response_format={"type": "json_object"}  # Force JSON response
+                response_format={"type": "json_object"},  # Force JSON response
             )
 
             # Extract text from response
@@ -93,7 +86,9 @@ class OpenAIProvider(LLMProvider):
             return labels
 
         except ImportError:
-            logger.error("openai package not installed. Install with: pip install openai")
+            logger.error(
+                "openai package not installed. Install with: pip install openai"
+            )
             return []
         except Exception as e:
             logger.error(f"Error classifying email with OpenAI: {e}", exc_info=True)

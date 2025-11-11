@@ -19,21 +19,21 @@ def mock_ollama():
 class TestOllamaProvider:
     """Tests for Ollama local LLM provider."""
 
-    def test_classify_email_success(self, mock_ollama, test_email, test_labels, classification_prompt):
+    def test_classify_email_success(
+        self, mock_ollama, test_email, test_labels, classification_prompt
+    ):
         """Test successful email classification."""
         mock_module, mock_client = mock_ollama
 
-        mock_response = {
-            'message': {
-                'content': '{"labels": ["AWS", "Finance"]}'
-            }
-        }
+        mock_response = {"message": {"content": '{"labels": ["AWS", "Finance"]}'}}
         mock_client.chat.return_value = mock_response
 
-        with patch.dict('sys.modules', {'ollama': mock_module}):
+        with patch.dict("sys.modules", {"ollama": mock_module}):
             from providers.ollama_provider import OllamaProvider
 
             provider = OllamaProvider()
-            result = provider.classify_email(test_email, classification_prompt, test_labels)
+            result = provider.classify_email(
+                test_email, classification_prompt, test_labels
+            )
 
             assert result == ["AWS", "Finance"]

@@ -11,7 +11,6 @@ Tests cover:
 
 import pytest
 from unittest.mock import Mock, patch
-import sys
 
 
 @pytest.fixture
@@ -31,19 +30,20 @@ class TestAnthropicProvider:
         """Test successful initialization."""
         mock_module, mock_client = mock_anthropic
 
-        with patch.dict('sys.modules', {'anthropic': mock_module}):
+        with patch.dict("sys.modules", {"anthropic": mock_module}):
             from providers.anthropic_provider import AnthropicProvider
 
             provider = AnthropicProvider(
-                api_key="test-api-key",
-                model="claude-3-5-sonnet-20241022"
+                api_key="test-api-key", model="claude-3-5-sonnet-20241022"
             )
 
             mock_module.Anthropic.assert_called_once_with(api_key="test-api-key")
             assert provider.model == "claude-3-5-sonnet-20241022"
             assert provider.client == mock_client
 
-    def test_classify_email_success(self, mock_anthropic, test_email, test_labels, classification_prompt):
+    def test_classify_email_success(
+        self, mock_anthropic, test_email, test_labels, classification_prompt
+    ):
         """Test successful email classification."""
         mock_module, mock_client = mock_anthropic
 
@@ -54,16 +54,20 @@ class TestAnthropicProvider:
         mock_response.content = [mock_content]
         mock_client.messages.create.return_value = mock_response
 
-        with patch.dict('sys.modules', {'anthropic': mock_module}):
+        with patch.dict("sys.modules", {"anthropic": mock_module}):
             from providers.anthropic_provider import AnthropicProvider
 
             provider = AnthropicProvider(api_key="test-key")
-            result = provider.classify_email(test_email, classification_prompt, test_labels)
+            result = provider.classify_email(
+                test_email, classification_prompt, test_labels
+            )
 
             assert result == ["AWS", "Finance"]
             assert mock_client.messages.create.called
 
-    def test_classify_email_with_markdown(self, mock_anthropic, test_email, test_labels, classification_prompt):
+    def test_classify_email_with_markdown(
+        self, mock_anthropic, test_email, test_labels, classification_prompt
+    ):
         """Test classification with markdown code block."""
         mock_module, mock_client = mock_anthropic
 
@@ -73,48 +77,60 @@ class TestAnthropicProvider:
         mock_response.content = [mock_content]
         mock_client.messages.create.return_value = mock_response
 
-        with patch.dict('sys.modules', {'anthropic': mock_module}):
+        with patch.dict("sys.modules", {"anthropic": mock_module}):
             from providers.anthropic_provider import AnthropicProvider
 
             provider = AnthropicProvider(api_key="test-key")
-            result = provider.classify_email(test_email, classification_prompt, test_labels)
+            result = provider.classify_email(
+                test_email, classification_prompt, test_labels
+            )
 
             assert "AWS" in result
             assert "Finance" in result
 
-    def test_classify_email_api_error(self, mock_anthropic, test_email, test_labels, classification_prompt):
+    def test_classify_email_api_error(
+        self, mock_anthropic, test_email, test_labels, classification_prompt
+    ):
         """Test handling of API error."""
         mock_module, mock_client = mock_anthropic
 
         mock_client.messages.create.side_effect = Exception("API rate limit exceeded")
 
-        with patch.dict('sys.modules', {'anthropic': mock_module}):
+        with patch.dict("sys.modules", {"anthropic": mock_module}):
             from providers.anthropic_provider import AnthropicProvider
 
             provider = AnthropicProvider(api_key="test-key")
-            result = provider.classify_email(test_email, classification_prompt, test_labels)
+            result = provider.classify_email(
+                test_email, classification_prompt, test_labels
+            )
 
             assert result == []
 
-    def test_classify_email_invalid_json(self, mock_anthropic, test_email, test_labels, classification_prompt):
+    def test_classify_email_invalid_json(
+        self, mock_anthropic, test_email, test_labels, classification_prompt
+    ):
         """Test handling of invalid JSON response."""
         mock_module, mock_client = mock_anthropic
 
         mock_response = Mock()
         mock_content = Mock()
-        mock_content.text = 'This is not valid JSON'
+        mock_content.text = "This is not valid JSON"
         mock_response.content = [mock_content]
         mock_client.messages.create.return_value = mock_response
 
-        with patch.dict('sys.modules', {'anthropic': mock_module}):
+        with patch.dict("sys.modules", {"anthropic": mock_module}):
             from providers.anthropic_provider import AnthropicProvider
 
             provider = AnthropicProvider(api_key="test-key")
-            result = provider.classify_email(test_email, classification_prompt, test_labels)
+            result = provider.classify_email(
+                test_email, classification_prompt, test_labels
+            )
 
             assert result == []
 
-    def test_classify_email_filters_invalid_labels(self, mock_anthropic, test_email, test_labels, classification_prompt):
+    def test_classify_email_filters_invalid_labels(
+        self, mock_anthropic, test_email, test_labels, classification_prompt
+    ):
         """Test that invalid labels are filtered."""
         mock_module, mock_client = mock_anthropic
 
@@ -124,17 +140,21 @@ class TestAnthropicProvider:
         mock_response.content = [mock_content]
         mock_client.messages.create.return_value = mock_response
 
-        with patch.dict('sys.modules', {'anthropic': mock_module}):
+        with patch.dict("sys.modules", {"anthropic": mock_module}):
             from providers.anthropic_provider import AnthropicProvider
 
             provider = AnthropicProvider(api_key="test-key")
-            result = provider.classify_email(test_email, classification_prompt, test_labels)
+            result = provider.classify_email(
+                test_email, classification_prompt, test_labels
+            )
 
             assert "AWS" in result
             assert "Finance" in result
             assert "InvalidLabel" not in result
 
-    def test_classify_email_case_insensitive(self, mock_anthropic, test_email, test_labels, classification_prompt):
+    def test_classify_email_case_insensitive(
+        self, mock_anthropic, test_email, test_labels, classification_prompt
+    ):
         """Test case-insensitive label matching."""
         mock_module, mock_client = mock_anthropic
 
@@ -144,11 +164,13 @@ class TestAnthropicProvider:
         mock_response.content = [mock_content]
         mock_client.messages.create.return_value = mock_response
 
-        with patch.dict('sys.modules', {'anthropic': mock_module}):
+        with patch.dict("sys.modules", {"anthropic": mock_module}):
             from providers.anthropic_provider import AnthropicProvider
 
             provider = AnthropicProvider(api_key="test-key")
-            result = provider.classify_email(test_email, classification_prompt, test_labels)
+            result = provider.classify_email(
+                test_email, classification_prompt, test_labels
+            )
 
             assert "AWS" in result
             assert "Finance" in result

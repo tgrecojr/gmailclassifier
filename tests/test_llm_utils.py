@@ -10,12 +10,11 @@ Tests cover:
 """
 
 import pytest
-import json
 from llm_utils import (
     construct_email_content,
     construct_classification_prompt,
     parse_labels_from_response,
-    log_classification_result
+    log_classification_result,
 )
 
 
@@ -25,79 +24,63 @@ class TestConstructEmailContent:
     def test_complete_email(self):
         """Test formatting a complete email with all fields."""
         email = {
-            'subject': 'Test Subject',
-            'from': 'test@example.com',
-            'date': '2025-01-11',
-            'body': 'This is the email body'
+            "subject": "Test Subject",
+            "from": "test@example.com",
+            "date": "2025-01-11",
+            "body": "This is the email body",
         }
 
         result = construct_email_content(email)
 
-        assert 'Subject: Test Subject' in result
-        assert 'From: test@example.com' in result
-        assert 'Date: 2025-01-11' in result
-        assert 'Body:\nThis is the email body' in result
+        assert "Subject: Test Subject" in result
+        assert "From: test@example.com" in result
+        assert "Date: 2025-01-11" in result
+        assert "Body:\nThis is the email body" in result
 
     def test_missing_subject(self):
         """Test email with missing subject."""
-        email = {
-            'from': 'test@example.com',
-            'date': '2025-01-11',
-            'body': 'Body text'
-        }
+        email = {"from": "test@example.com", "date": "2025-01-11", "body": "Body text"}
 
         result = construct_email_content(email)
 
-        assert 'Subject: No Subject' in result
+        assert "Subject: No Subject" in result
 
     def test_missing_sender(self):
         """Test email with missing sender."""
-        email = {
-            'subject': 'Test',
-            'date': '2025-01-11',
-            'body': 'Body text'
-        }
+        email = {"subject": "Test", "date": "2025-01-11", "body": "Body text"}
 
         result = construct_email_content(email)
 
-        assert 'From: Unknown' in result
+        assert "From: Unknown" in result
 
     def test_missing_date(self):
         """Test email with missing date."""
-        email = {
-            'subject': 'Test',
-            'from': 'test@example.com',
-            'body': 'Body text'
-        }
+        email = {"subject": "Test", "from": "test@example.com", "body": "Body text"}
 
         result = construct_email_content(email)
 
-        assert 'Date: Unknown' in result
+        assert "Date: Unknown" in result
 
     def test_snippet_instead_of_body(self):
         """Test using snippet when body is not available."""
         email = {
-            'subject': 'Test',
-            'from': 'test@example.com',
-            'date': '2025-01-11',
-            'snippet': 'This is a snippet'
+            "subject": "Test",
+            "from": "test@example.com",
+            "date": "2025-01-11",
+            "snippet": "This is a snippet",
         }
 
         result = construct_email_content(email)
 
-        assert 'This is a snippet' in result
+        assert "This is a snippet" in result
 
     def test_no_body_or_snippet(self):
         """Test email with no body or snippet."""
-        email = {
-            'subject': 'Test',
-            'from': 'test@example.com',
-            'date': '2025-01-11'
-        }
+        email = {"subject": "Test", "from": "test@example.com", "date": "2025-01-11"}
 
         result = construct_email_content(email)
 
-        assert 'Body:\nNo content' in result
+        assert "Body:\nNo content" in result
 
 
 class TestConstructClassificationPrompt:
@@ -110,9 +93,7 @@ class TestConstructClassificationPrompt:
         email_content = "Subject: Test\nFrom: test@example.com"
 
         result = construct_classification_prompt(
-            classification_prompt,
-            available_labels,
-            email_content
+            classification_prompt, available_labels, email_content
         )
 
         assert "Classify this email into categories." in result
@@ -127,9 +108,7 @@ class TestConstructClassificationPrompt:
         email_content = "Test email"
 
         result = construct_classification_prompt(
-            classification_prompt,
-            available_labels,
-            email_content
+            classification_prompt, available_labels, email_content
         )
 
         for label in available_labels:
@@ -154,9 +133,9 @@ class TestParseLabelsParsing:
 
     def test_json_in_markdown_code_block(self, available_labels):
         """Test parsing JSON in markdown code block."""
-        response = '''```json
+        response = """```json
 {"labels": ["AWS", "Finance"]}
-```'''
+```"""
 
         result = parse_labels_from_response(response, available_labels)
 
@@ -164,9 +143,9 @@ class TestParseLabelsParsing:
 
     def test_json_in_code_block_without_language(self, available_labels):
         """Test parsing JSON in code block without language specifier."""
-        response = '''```
+        response = """```
 {"labels": ["AWS", "Finance"]}
-```'''
+```"""
 
         result = parse_labels_from_response(response, available_labels)
 
@@ -267,14 +246,14 @@ class TestParseLabelsParsing:
 
     def test_multiline_json_in_code_block(self, available_labels):
         """Test parsing multiline JSON in code block."""
-        response = '''```json
+        response = """```json
 {
   "labels": [
     "AWS",
     "Finance"
   ]
 }
-```'''
+```"""
 
         result = parse_labels_from_response(response, available_labels)
 
@@ -282,11 +261,11 @@ class TestParseLabelsParsing:
 
     def test_nested_json_extraction(self, available_labels):
         """Test extracting JSON from complex response."""
-        response = '''The email discusses AWS billing and financial matters.
+        response = """The email discusses AWS billing and financial matters.
 
 Based on this analysis: {"labels": ["AWS", "Finance"]}
 
-These labels indicate the primary topics.'''
+These labels indicate the primary topics."""
 
         result = parse_labels_from_response(response, available_labels)
 
@@ -294,11 +273,11 @@ These labels indicate the primary topics.'''
 
     def test_whitespace_handling(self, available_labels):
         """Test handling of extra whitespace."""
-        response = '''
+        response = """
 
         {"labels": ["AWS", "Finance"]}
 
-        '''
+        """
 
         result = parse_labels_from_response(response, available_labels)
 
@@ -328,55 +307,59 @@ class TestLogClassificationResult:
     def test_log_with_labels(self, caplog):
         """Test logging when labels are predicted."""
         import logging
+
         caplog.set_level(logging.INFO)
 
-        email = {'subject': 'Test Email Subject'}
-        labels = ['AWS', 'Finance']
-        provider = 'TestProvider'
+        email = {"subject": "Test Email Subject"}
+        labels = ["AWS", "Finance"]
+        provider = "TestProvider"
 
         log_classification_result(email, labels, provider)
 
-        assert 'TestProvider' in caplog.text
-        assert 'Test Email Subject' in caplog.text
-        assert 'AWS' in caplog.text
-        assert 'Finance' in caplog.text
+        assert "TestProvider" in caplog.text
+        assert "Test Email Subject" in caplog.text
+        assert "AWS" in caplog.text
+        assert "Finance" in caplog.text
 
     def test_log_without_labels(self, caplog):
         """Test logging when no labels are predicted."""
         import logging
+
         caplog.set_level(logging.WARNING)
 
-        email = {'subject': 'Test Email'}
+        email = {"subject": "Test Email"}
         labels = []
-        provider = 'TestProvider'
+        provider = "TestProvider"
 
         log_classification_result(email, labels, provider)
 
-        assert 'No labels predicted' in caplog.text
+        assert "No labels predicted" in caplog.text
 
     def test_log_with_long_subject(self, caplog):
         """Test logging with long email subject (should be truncated)."""
         import logging
+
         caplog.set_level(logging.INFO)
 
-        email = {'subject': 'A' * 100}
-        labels = ['AWS']
-        provider = 'TestProvider'
+        email = {"subject": "A" * 100}
+        labels = ["AWS"]
+        provider = "TestProvider"
 
         log_classification_result(email, labels, provider)
 
         # Should truncate at 50 chars
-        assert caplog.text.count('A') <= 53  # 50 + '...'
+        assert caplog.text.count("A") <= 53  # 50 + '...'
 
     def test_log_with_no_subject(self, caplog):
         """Test logging when email has no subject."""
         import logging
+
         caplog.set_level(logging.INFO)
 
         email = {}
-        labels = ['AWS']
-        provider = 'TestProvider'
+        labels = ["AWS"]
+        provider = "TestProvider"
 
         log_classification_result(email, labels, provider)
 
-        assert 'No Subject' in caplog.text
+        assert "No Subject" in caplog.text

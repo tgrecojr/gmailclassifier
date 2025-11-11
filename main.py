@@ -6,7 +6,7 @@ An agentic application using LLM providers to automatically read and label Gmail
 based on predefined categories.
 """
 
-import sys,os
+import sys, os
 import logging
 import argparse
 from email_classifier_agent import EmailClassifierAgent
@@ -19,10 +19,8 @@ def setup_logging(level: str = "INFO"):
 
     logging.basicConfig(
         level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout)
-        ]
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
     )
 
 
@@ -30,13 +28,13 @@ def main():
     os.environ["ANONYMIZED_TELEMETRY"] = "false"
     """Main entry point for the email classifier agent."""
     parser = argparse.ArgumentParser(
-        description='Gmail Email Classifier Agent with multi-LLM provider support'
+        description="Gmail Email Classifier Agent with multi-LLM provider support"
     )
     parser.add_argument(
-        '--log-level',
-        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default=config.LOG_LEVEL,
-        help='Logging level'
+        help="Logging level",
     )
 
     args = parser.parse_args()

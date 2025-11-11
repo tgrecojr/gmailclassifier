@@ -19,7 +19,9 @@ def mock_openai():
 class TestOpenAIProvider:
     """Tests for OpenAI API provider."""
 
-    def test_classify_email_success(self, mock_openai, test_email, test_labels, classification_prompt):
+    def test_classify_email_success(
+        self, mock_openai, test_email, test_labels, classification_prompt
+    ):
         """Test successful email classification."""
         mock_module, mock_client = mock_openai
 
@@ -31,10 +33,12 @@ class TestOpenAIProvider:
         mock_response.choices = [mock_choice]
         mock_client.chat.completions.create.return_value = mock_response
 
-        with patch.dict('sys.modules', {'openai': mock_module}):
+        with patch.dict("sys.modules", {"openai": mock_module}):
             from providers.openai_provider import OpenAIProvider
 
             provider = OpenAIProvider(api_key="test-key")
-            result = provider.classify_email(test_email, classification_prompt, test_labels)
+            result = provider.classify_email(
+                test_email, classification_prompt, test_labels
+            )
 
             assert result == ["AWS", "Finance"]
