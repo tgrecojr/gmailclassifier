@@ -1,0 +1,32 @@
+[run]
+source = .
+omit =
+    tests/*
+    test_*.py
+    */__pycache__/*
+    */site-packages/*
+    .venv/*
+    venv/*
+    setup.py
+    */migrations/*
+    # Exclude files without tests (for now)
+    config.py
+    email_classifier_agent.py
+    gmail_client.py
+    main.py
+    setup_token.py
+    verify_setup.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+precision = 2
+
+[html]
+directory = htmlcov

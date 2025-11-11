@@ -14,10 +14,7 @@ class LLMProvider(ABC):
 
     @abstractmethod
     def classify_email(
-        self,
-        email: Dict,
-        classification_prompt: str,
-        available_labels: List[str]
+        self, email: Dict, classification_prompt: str, available_labels: List[str]
     ) -> List[str]:
         """
         Classify an email using the LLM provider.

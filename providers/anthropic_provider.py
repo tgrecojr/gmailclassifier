@@ -9,7 +9,7 @@ from llm_utils import (
     construct_email_content,
     construct_classification_prompt,
     parse_labels_from_response,
-    log_classification_result
+    log_classification_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,7 @@ class AnthropicProvider(LLMProvider):
         """
         try:
             import anthropic
+
             self.client = anthropic.Anthropic(api_key=api_key)
             self.model = model
             logger.info(f"Initialized Anthropic provider with model: {model}")
@@ -38,10 +39,7 @@ class AnthropicProvider(LLMProvider):
             )
 
     def classify_email(
-        self,
-        email: Dict,
-        classification_prompt: str,
-        available_labels: List[str]
+        self, email: Dict, classification_prompt: str, available_labels: List[str]
     ) -> List[str]:
         """
         Classify an email using Anthropic Direct API.
@@ -58,9 +56,7 @@ class AnthropicProvider(LLMProvider):
             # Construct email content and full prompt using shared utilities
             email_content = construct_email_content(email)
             full_prompt = construct_classification_prompt(
-                classification_prompt,
-                available_labels,
-                email_content
+                classification_prompt, available_labels, email_content
             )
 
             # Call Anthropic API
@@ -68,12 +64,7 @@ class AnthropicProvider(LLMProvider):
                 model=self.model,
                 max_tokens=1000,
                 temperature=0.1,  # Low temperature for more deterministic classification
-                messages=[
-                    {
-                        "role": "user",
-                        "content": full_prompt
-                    }
-                ]
+                messages=[{"role": "user", "content": full_prompt}],
             )
 
             # Extract text from response
@@ -88,7 +79,9 @@ class AnthropicProvider(LLMProvider):
             return labels
 
         except ImportError:
-            logger.error("anthropic package not installed. Install with: pip install anthropic")
+            logger.error(
+                "anthropic package not installed. Install with: pip install anthropic"
+            )
             return []
         except Exception as e:
             logger.error(f"Error classifying email with Anthropic: {e}", exc_info=True)

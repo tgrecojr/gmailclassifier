@@ -34,9 +34,7 @@ Body:
 
 
 def construct_classification_prompt(
-    classification_prompt: str,
-    available_labels: List[str],
-    email_content: str
+    classification_prompt: str, available_labels: List[str], email_content: str
 ) -> str:
     """
     Construct the full classification prompt for the LLM.
@@ -81,15 +79,15 @@ def parse_labels_from_response(response: str, available_labels: List[str]) -> Li
         response = response.strip()
 
         # Remove markdown code block markers if present
-        if '```' in response:
+        if "```" in response:
             # Extract content between code blocks
-            code_block_pattern = r'```(?:json)?\s*\n?(.*?)\n?```'
+            code_block_pattern = r"```(?:json)?\s*\n?(.*?)\n?```"
             match = re.search(code_block_pattern, response, re.DOTALL)
             if match:
                 response = match.group(1).strip()
             else:
                 # Fall back to removing just the markers
-                response = response.replace('```json', '').replace('```', '').strip()
+                response = response.replace("```json", "").replace("```", "").strip()
 
         # Try to find JSON object in the response (even if surrounded by text)
         json_pattern = r'\{[^{}]*"labels"[^{}]*\}'
@@ -101,8 +99,8 @@ def parse_labels_from_response(response: str, available_labels: List[str]) -> Li
         data = json.loads(response)
 
         # Extract labels from different formats
-        if isinstance(data, dict) and 'labels' in data:
-            labels = data['labels']
+        if isinstance(data, dict) and "labels" in data:
+            labels = data["labels"]
         elif isinstance(data, list):
             labels = data
         else:
@@ -134,25 +132,31 @@ def parse_labels_from_response(response: str, available_labels: List[str]) -> Li
 
         # Log if some labels were invalid
         if len(valid_labels) != len(labels):
-            invalid = [l for l in labels if l not in valid_labels and isinstance(l, str)]
+            invalid = [
+                l for l in labels if l not in valid_labels and isinstance(l, str)
+            ]
             if invalid:
                 logger.warning(f"Filtered out invalid labels: {invalid}")
 
         return valid_labels
 
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON from response: {response[:200]}... Error: {e}")
+        logger.error(
+            f"Failed to parse JSON from response: {response[:200]}... Error: {e}"
+        )
         # Try one more time to extract JSON from text
         try:
             # Look for any JSON-like structure
-            json_like_pattern = r'\[[^\[\]]*\]|\{[^{}]*\}'
+            json_like_pattern = r"\[[^\[\]]*\]|\{[^{}]*\}"
             matches = re.findall(json_like_pattern, response)
             for match in matches:
                 try:
                     data = json.loads(match)
                     if isinstance(data, list):
-                        return parse_labels_from_response(json.dumps({"labels": data}), available_labels)
-                    elif isinstance(data, dict) and 'labels' in data:
+                        return parse_labels_from_response(
+                            json.dumps({"labels": data}), available_labels
+                        )
+                    elif isinstance(data, dict) and "labels" in data:
                         return parse_labels_from_response(match, available_labels)
                 except json.JSONDecodeError:
                     continue
@@ -175,8 +179,10 @@ def log_classification_result(email: Dict, labels: List[str], provider: str):
         labels: Predicted labels
         provider: Provider name for logging
     """
-    subject = email.get('subject', 'No Subject')
+    subject = email.get("subject", "No Subject")
     if labels:
-        logger.info(f"[{provider}] Classified '{subject[:50]}...' with labels: {labels}")
+        logger.info(
+            f"[{provider}] Classified '{subject[:50]}...' with labels: {labels}"
+        )
     else:
         logger.warning(f"[{provider}] No labels predicted for '{subject[:50]}...'")

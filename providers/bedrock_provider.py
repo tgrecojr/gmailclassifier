@@ -12,7 +12,7 @@ from llm_utils import (
     construct_email_content,
     construct_classification_prompt,
     parse_labels_from_response,
-    log_classification_result
+    log_classification_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ class BedrockProvider(LLMProvider):
         region: str,
         model_id: str,
         aws_access_key_id: str = None,
-        aws_secret_access_key: str = None
+        aws_secret_access_key: str = None,
     ):
         """
         Initialize Bedrock provider.
@@ -42,22 +42,19 @@ class BedrockProvider(LLMProvider):
         # Create boto3 client
         if aws_access_key_id and aws_secret_access_key:
             self.client = boto3.client(
-                'bedrock-runtime',
+                "bedrock-runtime",
                 region_name=region,
                 aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key
+                aws_secret_access_key=aws_secret_access_key,
             )
         else:
             # Use default credential chain (environment variables, IAM role, etc.)
-            self.client = boto3.client('bedrock-runtime', region_name=region)
+            self.client = boto3.client("bedrock-runtime", region_name=region)
 
         logger.info(f"Initialized Bedrock provider with model: {model_id}")
 
     def classify_email(
-        self,
-        email: Dict,
-        classification_prompt: str,
-        available_labels: List[str]
+        self, email: Dict, classification_prompt: str, available_labels: List[str]
     ) -> List[str]:
         """
         Classify an email using AWS Bedrock.
@@ -74,9 +71,7 @@ class BedrockProvider(LLMProvider):
             # Construct email content and full prompt using shared utilities
             email_content = construct_email_content(email)
             full_prompt = construct_classification_prompt(
-                classification_prompt,
-                available_labels,
-                email_content
+                classification_prompt, available_labels, email_content
             )
 
             # Call Bedrock with Claude model
@@ -112,27 +107,21 @@ class BedrockProvider(LLMProvider):
             request_body = {
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 1000,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "temperature": 0.1  # Low temperature for more deterministic classification
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,  # Low temperature for more deterministic classification
             }
 
             # Invoke the model
             response = self.client.invoke_model(
-                modelId=self.model_id,
-                body=json.dumps(request_body)
+                modelId=self.model_id, body=json.dumps(request_body)
             )
 
             # Parse response
-            response_body = json.loads(response['body'].read())
+            response_body = json.loads(response["body"].read())
 
             # Extract text from Claude's response
-            if 'content' in response_body and len(response_body['content']) > 0:
-                return response_body['content'][0]['text']
+            if "content" in response_body and len(response_body["content"]) > 0:
+                return response_body["content"][0]["text"]
             else:
                 logger.error("Unexpected response format from Bedrock")
                 return ""

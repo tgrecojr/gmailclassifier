@@ -12,6 +12,7 @@ from pathlib import Path
 from gmail_client import GmailClient
 import config
 
+
 def main():
     print("=" * 60)
     print("Gmail Token Generator")
@@ -33,7 +34,7 @@ def main():
     if Path(config.GMAIL_TOKEN_PATH).exists():
         print(f"⚠️  Warning: {config.GMAIL_TOKEN_PATH} already exists!")
         response = input("Do you want to regenerate it? (y/N): ").strip().lower()
-        if response != 'y':
+        if response != "y":
             print("Aborted.")
             return 0
 
@@ -53,7 +54,7 @@ def main():
             credentials_path=config.GMAIL_CREDENTIALS_PATH,
             token_path=config.GMAIL_TOKEN_PATH,
             scopes=config.GMAIL_SCOPES,
-            headless=False  # Always use browser mode for this script
+            headless=False,  # Always use browser mode for this script
         )
 
         # Test the connection
