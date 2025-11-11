@@ -3,7 +3,7 @@ import time
 import logging
 from typing import Dict, List
 from gmail_client import GmailClient
-from bedrock_classifier import BedrockClassifier
+from llm_factory import create_llm_provider
 import config
 
 logger = logging.getLogger(__name__)
@@ -22,18 +22,13 @@ class EmailClassifierAgent:
             headless=config.GMAIL_HEADLESS_MODE
         )
 
-        # Initialize Bedrock classifier
-        self.classifier = BedrockClassifier(
-            region=config.AWS_REGION,
-            model_id=config.BEDROCK_MODEL_ID,
-            aws_access_key_id=config.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY
-        )
+        # Initialize LLM provider (Bedrock, Anthropic, OpenAI, or Ollama)
+        self.classifier = create_llm_provider(config)
 
         # Create Gmail labels if they don't exist
         self.label_id_map = self._initialize_labels()
 
-        logger.info("Email Classifier Agent initialized successfully")
+        logger.info(f"Email Classifier Agent initialized with {config.LLM_PROVIDER} provider")
 
     def _initialize_labels(self) -> Dict[str, str]:
         """

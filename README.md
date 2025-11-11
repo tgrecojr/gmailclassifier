@@ -1,16 +1,17 @@
 # Gmail Email Classifier Agent
 
-An intelligent email classification system that automatically reads, categorizes, and labels Gmail emails using AWS Bedrock (Claude) for AI-powered classification.
+An intelligent email classification system that automatically reads, categorizes, and labels Gmail emails using AI-powered classification.
 
 ## Features
 
 - **Automatic Email Processing**: Continuously monitors your Gmail inbox for unread emails
-- **AI-Powered Classification**: Uses AWS Bedrock with Claude models for intelligent categorization
+- **AI-Powered Classification**: Supports multiple LLM providers (AWS Bedrock, Anthropic, OpenAI, Ollama)
 - **Multi-Label Support**: Emails can be assigned multiple labels simultaneously
 - **Gmail Integration**: Seamlessly integrates with Gmail API for reading and labeling emails
 - **Fully Customizable**: Configure your own label categories and classification rules via JSON config file
 - **Continuous Operation**: Runs as a persistent service with configurable polling intervals
 - **State Persistence**: Tracks processed emails to avoid reprocessing after restarts
+- **Privacy Options**: Use local LLMs (Ollama) to keep emails on your machine
 
 ## Customizing Labels and Classification
 
@@ -34,9 +35,60 @@ The system uses a JSON configuration file (`classifier_config.json`) to define l
 
 See [Configuration](#configuration) section below for details on customizing your labels.
 
+## Choosing an LLM Provider
+
+The Gmail Classifier supports multiple LLM providers. Choose the one that best fits your needs:
+
+| Provider | Cost | Privacy | Setup Complexity | Best For |
+|----------|------|---------|------------------|----------|
+| **Ollama** | FREE | ⭐⭐⭐ Local | Medium | Privacy-conscious users, free local processing |
+| **Anthropic API** | Paid | Cloud | Easy | Simple setup, direct Claude access |
+| **OpenAI** | Paid | Cloud | Easy | Existing OpenAI users, GPT-4 access |
+| **AWS Bedrock** | Paid | Cloud | Complex | AWS infrastructure users, enterprise |
+
+### Quick Start by Provider
+
+**Ollama (Free, Local, Private)**
+```bash
+# .env
+LLM_PROVIDER=ollama
+OLLAMA_MODEL=llama3
+OLLAMA_BASE_URL=http://localhost:11434
+```
+Requirements: Install [Ollama](https://ollama.ai/) locally and pull a model (`ollama pull llama3`)
+
+**Anthropic Direct API (Easiest Cloud Setup)**
+```bash
+# .env
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-xxx
+ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+```
+Requirements: [Anthropic API key](https://console.anthropic.com/)
+
+**OpenAI API**
+```bash
+# .env
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-xxx
+OPENAI_MODEL=gpt-4-turbo
+```
+Requirements: [OpenAI API key](https://platform.openai.com/)
+
+**AWS Bedrock**
+```bash
+# .env
+LLM_PROVIDER=bedrock
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-5-20250929-v1:0
+```
+Requirements: AWS account with Bedrock access
+
 ## Prerequisites
 
-### 1. Gmail API Credentials
+### 1. Gmail API Credentials (Required for all providers)
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select an existing one
@@ -44,12 +96,14 @@ See [Configuration](#configuration) section below for details on customizing you
 4. Create OAuth 2.0 credentials (Desktop application)
 5. Download the credentials JSON file and save it as `credentials.json` in the project directory
 
-### 2. AWS Bedrock Access
+### 2. LLM Provider (Choose one)
 
-1. Ensure you have an AWS account with Bedrock access
-2. Request access to Claude models in AWS Bedrock (if not already granted)
-3. Have your AWS credentials ready (Access Key ID and Secret Access Key)
-4. Ensure your IAM user/role has permissions for `bedrock:InvokeModel`
+Select and configure one of the following providers:
+
+- **Ollama**: Install from [ollama.ai](https://ollama.ai/) and pull a model
+- **Anthropic**: Get API key from [console.anthropic.com](https://console.anthropic.com/)
+- **OpenAI**: Get API key from [platform.openai.com](https://platform.openai.com/)
+- **AWS Bedrock**: Requires AWS account with Bedrock access and IAM permissions
 
 ### 3. Python Environment
 
@@ -68,7 +122,14 @@ cd gmailclassifier
 2. Install dependencies:
 
 ```bash
+# Install core dependencies
 pip install -r requirements.txt
+
+# Install provider-specific dependencies (choose one or more)
+pip install anthropic  # For Anthropic provider
+pip install openai     # For OpenAI provider
+pip install ollama     # For Ollama provider
+# Bedrock dependencies (boto3) are included by default
 ```
 
 3. Copy the example environment file and configure it:
@@ -88,11 +149,11 @@ Then edit `classifier_config.json` to customize your labels and classification p
 5. Edit `.env` with your credentials:
 
 ```bash
-# AWS Bedrock Configuration
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_access_key_here
-AWS_SECRET_ACCESS_KEY=your_secret_key_here
-BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-5-20250929-v1:0
+# LLM Provider Selection
+LLM_PROVIDER=bedrock  # Options: bedrock, anthropic, openai, ollama
+
+# Provider-specific configuration (configure the one you're using)
+# See "Choosing an LLM Provider" section above for details
 
 # Gmail API Configuration
 GMAIL_CREDENTIALS_PATH=credentials.json
@@ -106,6 +167,8 @@ POLL_INTERVAL_SECONDS=60
 MAX_EMAILS_PER_POLL=10
 LOG_LEVEL=INFO
 ```
+
+See [Choosing an LLM Provider](#choosing-an-llm-provider) section for provider-specific configuration details.
 
 6. Place your Gmail `credentials.json` file in the project directory
 
