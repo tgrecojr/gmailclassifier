@@ -258,6 +258,19 @@ This is especially important because:
 - The `./data` directory is mounted as a volume to persist state across container restarts
 - Without this volume, the agent would reprocess all unread emails after each restart
 
+### State Retention
+
+To prevent the state file from growing indefinitely, the agent automatically removes old entries based on a configurable retention period:
+
+- **Default retention**: 30 days (configurable via `STATE_RETENTION_DAYS` in `.env`)
+- **How it works**: Emails processed more than N days ago are automatically removed from state
+- **Cleanup timing**: Old entries are removed when the agent starts and periodically during each poll cycle
+- **Disable retention**: Set `STATE_RETENTION_DAYS=0` to keep all entries forever
+
+**Example**: With `STATE_RETENTION_DAYS=30`, if you receive the same email again after 30 days, it will be reprocessed (useful for recurring notifications).
+
+**Migration**: The state file automatically migrates from the old format (list of IDs) to the new format (dictionary with timestamps) on first load.
+
 To clear the state and reprocess all emails:
 ```bash
 # Local

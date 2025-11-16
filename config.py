@@ -98,4 +98,5 @@ REMOVE_FROM_INBOX = os.getenv("REMOVE_FROM_INBOX", "true").lower() == "true"
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "60"))
 MAX_EMAILS_PER_POLL = int(os.getenv("MAX_EMAILS_PER_POLL", "10"))
 STATE_FILE = os.getenv("STATE_FILE", ".email_state.json")
+STATE_RETENTION_DAYS = int(os.getenv("STATE_RETENTION_DAYS", "30"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
