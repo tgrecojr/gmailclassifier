@@ -24,6 +24,7 @@ def temp_state_file():
 @pytest.fixture
 def mock_config_with_state(temp_state_file):
     """Mock config with temporary state file."""
+    # Patch config at import time to avoid loading classifier_config.json
     with patch("email_classifier_agent.config") as mock_config:
         mock_config.STATE_FILE = temp_state_file
         mock_config.GMAIL_CREDENTIALS_PATH = "credentials.json"
@@ -32,7 +33,9 @@ def mock_config_with_state(temp_state_file):
         mock_config.GMAIL_HEADLESS_MODE = True
         mock_config.LLM_PROVIDER = "bedrock"
         mock_config.LABELS = ["AWS", "Github", "Shipping"]
-        mock_config.CLASSIFICATION_PROMPT = "Test prompt"
+        mock_config.CLASSIFICATION_PROMPT = (
+            "Test classification prompt for unit tests"
+        )
         mock_config.REMOVE_FROM_INBOX = True
         yield mock_config
 
