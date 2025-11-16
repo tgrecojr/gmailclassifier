@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 import pytest
+from datetime import timezone
 from unittest.mock import Mock, patch
 from email_classifier_agent import EmailClassifierAgent
 
@@ -27,6 +28,7 @@ def mock_config_with_state(temp_state_file):
     # Patch config at import time to avoid loading classifier_config.json
     with patch("email_classifier_agent.config") as mock_config:
         mock_config.STATE_FILE = temp_state_file
+        mock_config.STATE_RETENTION_DAYS = 30
         mock_config.GMAIL_CREDENTIALS_PATH = "credentials.json"
         mock_config.GMAIL_TOKEN_PATH = "token.json"
         mock_config.GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
@@ -104,27 +106,35 @@ class TestEmailClassifierAgentStateTracking:
         self, mock_config_with_state, mock_gmail_client, mock_llm_provider
     ):
         """Test saving state to file."""
+        from datetime import datetime
+
         agent = EmailClassifierAgent()
-        agent.processed_emails.add("email1")
-        agent.processed_emails.add("email2")
+        timestamp1 = datetime.now(timezone.utc).isoformat()
+        timestamp2 = datetime.now(timezone.utc).isoformat()
+        agent.processed_emails["email1"] = timestamp1
+        agent.processed_emails["email2"] = timestamp2
         agent._save_state()
 
         # Verify state file contents
         with open(mock_config_with_state.STATE_FILE, "r") as f:
             state_data = json.load(f)
-        assert set(state_data["processed_emails"]) == {"email1", "email2"}
+        assert "email1" in state_data["processed_emails"]
+        assert "email2" in state_data["processed_emails"]
+        assert isinstance(state_data["processed_emails"], dict)
 
     def test_save_state_creates_directory(
         self, mock_config_with_state, mock_gmail_client, mock_llm_provider
     ):
         """Test that save_state creates directory if it doesn't exist."""
+        from datetime import datetime
+
         # Use a state file in a non-existent directory
         with tempfile.TemporaryDirectory() as tmpdir:
             state_path = os.path.join(tmpdir, "subdir", "state.json")
             mock_config_with_state.STATE_FILE = state_path
 
             agent = EmailClassifierAgent()
-            agent.processed_emails.add("email1")
+            agent.processed_emails["email1"] = datetime.now(timezone.utc).isoformat()
             agent._save_state()
 
             assert os.path.exists(state_path)
@@ -300,3 +310,147 @@ class TestEmailClassifierAgentStateTracking:
 
         # LLM should only be called 5 times (once per unique email)
         assert mock_llm_provider.classify_email.call_count == 5
+
+    def test_state_retention_removes_old_entries(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        """Test that old entries are removed based on retention period."""
+        from datetime import datetime, timedelta
+
+        # Set retention to 7 days
+        mock_config_with_state.STATE_RETENTION_DAYS = 7
+
+        # Create state with old and new emails
+        old_timestamp = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+        recent_timestamp = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        current_timestamp = datetime.now(timezone.utc).isoformat()
+
+        state_data = {
+            "processed_emails": {
+                "old_email_1": old_timestamp,
+                "old_email_2": old_timestamp,
+                "recent_email": recent_timestamp,
+                "current_email": current_timestamp,
+            }
+        }
+        with open(mock_config_with_state.STATE_FILE, "w") as f:
+            json.dump(state_data, f)
+
+        agent = EmailClassifierAgent()
+
+        # Only recent and current emails should be loaded
+        assert len(agent.processed_emails) == 2
+        assert "recent_email" in agent.processed_emails
+        assert "current_email" in agent.processed_emails
+        assert "old_email_1" not in agent.processed_emails
+        assert "old_email_2" not in agent.processed_emails
+
+    def test_state_retention_migration_from_list(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        """Test migration from old list format to new dict format."""
+        # Create state file with old list format
+        state_data = {"processed_emails": ["email1", "email2", "email3"]}
+        with open(mock_config_with_state.STATE_FILE, "w") as f:
+            json.dump(state_data, f)
+
+        agent = EmailClassifierAgent()
+
+        # All emails should be loaded
+        assert len(agent.processed_emails) == 3
+        assert "email1" in agent.processed_emails
+        assert "email2" in agent.processed_emails
+        assert "email3" in agent.processed_emails
+
+        # All should have timestamps
+        for email_id in ["email1", "email2", "email3"]:
+            assert isinstance(agent.processed_emails[email_id], str)
+            # Verify it's a valid ISO format timestamp
+            from datetime import datetime
+
+            datetime.fromisoformat(agent.processed_emails[email_id])
+
+    def test_state_retention_disabled(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        """Test that retention can be disabled (retention_days <= 0)."""
+        from datetime import datetime, timedelta
+
+        # Disable retention
+        mock_config_with_state.STATE_RETENTION_DAYS = 0
+
+        # Create state with very old emails
+        very_old_timestamp = (
+            datetime.now(timezone.utc) - timedelta(days=365)
+        ).isoformat()
+
+        state_data = {
+            "processed_emails": {
+                "old_email_1": very_old_timestamp,
+                "old_email_2": very_old_timestamp,
+            }
+        }
+        with open(mock_config_with_state.STATE_FILE, "w") as f:
+            json.dump(state_data, f)
+
+        agent = EmailClassifierAgent()
+
+        # All emails should be kept when retention is disabled
+        assert len(agent.processed_emails) == 2
+        assert "old_email_1" in agent.processed_emails
+        assert "old_email_2" in agent.processed_emails
+
+    def test_cleanup_old_state_periodic(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        """Test that periodic cleanup in run_continuous works."""
+        from datetime import datetime, timedelta
+
+        mock_config_with_state.STATE_RETENTION_DAYS = 5
+
+        agent = EmailClassifierAgent()
+
+        # Add old and new emails
+        old_timestamp = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+        new_timestamp = datetime.now(timezone.utc).isoformat()
+
+        agent.processed_emails["old_email"] = old_timestamp
+        agent.processed_emails["new_email"] = new_timestamp
+
+        assert len(agent.processed_emails) == 2
+
+        # Call cleanup manually (simulating what happens in run_continuous)
+        agent.processed_emails = agent._cleanup_old_state(agent.processed_emails)
+
+        # Only new email should remain
+        assert len(agent.processed_emails) == 1
+        assert "new_email" in agent.processed_emails
+        assert "old_email" not in agent.processed_emails
+
+    def test_process_email_stores_timestamp(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        """Test that processing an email stores a valid timestamp."""
+        from datetime import datetime
+
+        agent = EmailClassifierAgent()
+
+        email = {
+            "id": "test_timestamp_email",
+            "subject": "Test Email",
+            "from": "test@example.com",
+            "body": "Test body",
+        }
+
+        agent.process_email(email)
+
+        # Email should be in state
+        assert "test_timestamp_email" in agent.processed_emails
+
+        # Should have a valid ISO format timestamp
+        timestamp_str = agent.processed_emails["test_timestamp_email"]
+        timestamp = datetime.fromisoformat(timestamp_str)
+
+        # Timestamp should be recent (within last minute)
+        time_diff = datetime.now(timezone.utc) - timestamp
+        assert time_diff.total_seconds() < 60

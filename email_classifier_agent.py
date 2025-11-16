@@ -2,7 +2,8 @@ import json
 import time
 import logging
 import os
-from typing import Dict, Set
+from datetime import datetime, timedelta, timezone
+from typing import Dict
 from gmail_client import GmailClient
 from llm_factory import create_llm_provider
 import config
@@ -31,12 +32,16 @@ class EmailClassifierAgent:
 
         # Load processed email state
         self.state_file = config.STATE_FILE
-        self.processed_emails: Set[str] = self._load_state()
+        self.retention_days = config.STATE_RETENTION_DAYS
+        self.processed_emails: Dict[str, str] = self._load_state()
 
         logger.info(
             f"Email Classifier Agent initialized with {config.LLM_PROVIDER} provider"
         )
-        logger.info(f"Loaded {len(self.processed_emails)} processed emails from state")
+        logger.info(
+            f"Loaded {len(self.processed_emails)} processed emails from state "
+            f"(retention: {self.retention_days} days)"
+        )
 
     def _initialize_labels(self) -> Dict[str, str]:
         """
@@ -54,32 +59,87 @@ class EmailClassifierAgent:
         logger.info(f"Initialized {len(label_map)} Gmail labels")
         return label_map
 
-    def _load_state(self) -> Set[str]:
+    def _load_state(self) -> Dict[str, str]:
         """
-        Load processed email IDs from state file.
+        Load processed email IDs with timestamps from state file.
 
         Returns:
-            Set of processed email IDs
+            Dictionary mapping email IDs to ISO format timestamps
         """
         if not os.path.exists(self.state_file):
             logger.info(f"No state file found at {self.state_file}, starting fresh")
-            return set()
+            return {}
 
         try:
             with open(self.state_file, "r") as f:
                 state_data = json.load(f)
-                processed_ids = set(state_data.get("processed_emails", []))
+                processed_emails_raw = state_data.get("processed_emails", {})
+
+                # Handle migration from old format (list) to new format (dict)
+                if isinstance(processed_emails_raw, list):
+                    logger.info(
+                        "Migrating state from old format (list) to new format (dict)"
+                    )
+                    # Convert list to dict with current timestamp for all entries
+                    current_time = datetime.now(timezone.utc).isoformat()
+                    processed_emails = {
+                        email_id: current_time for email_id in processed_emails_raw
+                    }
+                else:
+                    processed_emails = processed_emails_raw
+
+                # Cleanup old entries
+                processed_emails = self._cleanup_old_state(processed_emails)
+
                 logger.info(
-                    f"Loaded {len(processed_ids)} processed email IDs from {self.state_file}"
+                    f"Loaded {len(processed_emails)} processed email IDs from {self.state_file}"
                 )
-                return processed_ids
+                return processed_emails
         except Exception as e:
             logger.error(f"Error loading state file {self.state_file}: {e}")
-            return set()
+            return {}
+
+    def _cleanup_old_state(self, processed_emails: Dict[str, str]) -> Dict[str, str]:
+        """
+        Remove entries older than retention period.
+
+        Args:
+            processed_emails: Dictionary of email_id -> timestamp
+
+        Returns:
+            Cleaned dictionary with only recent entries
+        """
+        if self.retention_days <= 0:
+            # Retention disabled (keep all)
+            return processed_emails
+
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.retention_days)
+        original_count = len(processed_emails)
+
+        cleaned = {}
+        for email_id, timestamp_str in processed_emails.items():
+            try:
+                timestamp = datetime.fromisoformat(timestamp_str)
+                if timestamp >= cutoff_date:
+                    cleaned[email_id] = timestamp_str
+            except (ValueError, TypeError) as e:
+                # Invalid timestamp, skip this entry
+                logger.warning(
+                    f"Skipping entry with invalid timestamp: {email_id} - {e}"
+                )
+                continue
+
+        removed_count = original_count - len(cleaned)
+        if removed_count > 0:
+            logger.info(
+                f"Removed {removed_count} email(s) older than {self.retention_days} days from state"
+            )
+
+        return cleaned
 
     def _save_state(self):
         """
-        Save processed email IDs to state file.
+        Save processed email IDs with timestamps to state file.
         """
         try:
             # Ensure directory exists
@@ -87,7 +147,7 @@ class EmailClassifierAgent:
             if state_dir and not os.path.exists(state_dir):
                 os.makedirs(state_dir, exist_ok=True)
 
-            state_data = {"processed_emails": list(self.processed_emails)}
+            state_data = {"processed_emails": self.processed_emails}
             with open(self.state_file, "w") as f:
                 json.dump(state_data, f, indent=2)
             logger.debug(f"State saved to {self.state_file}")
@@ -129,7 +189,7 @@ class EmailClassifierAgent:
             if not predicted_labels:
                 logger.warning(f"No labels predicted for email: {email['subject']}")
                 # Still mark as processed to avoid re-attempting
-                self.processed_emails.add(email_id)
+                self.processed_emails[email_id] = datetime.now(timezone.utc).isoformat()
                 self._save_state()
                 return False
 
@@ -158,8 +218,8 @@ class EmailClassifierAgent:
                     f"No valid label IDs found for predicted labels: {predicted_labels}"
                 )
 
-            # Mark as processed and save state
-            self.processed_emails.add(email_id)
+            # Mark as processed with timestamp and save state
+            self.processed_emails[email_id] = datetime.now(timezone.utc).isoformat()
             self._save_state()
 
             return True
@@ -179,6 +239,9 @@ class EmailClassifierAgent:
         while True:
             try:
                 logger.info("=== Checking for new emails ===")
+
+                # Cleanup old state entries periodically
+                self.processed_emails = self._cleanup_old_state(self.processed_emails)
 
                 # Get unread emails
                 emails = self.gmail_client.get_unread_messages(
