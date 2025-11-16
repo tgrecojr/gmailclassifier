@@ -1,7 +1,8 @@
 import json
 import time
 import logging
-from typing import Dict, List
+import os
+from typing import Dict, Set
 from gmail_client import GmailClient
 from llm_factory import create_llm_provider
 import config
@@ -28,9 +29,14 @@ class EmailClassifierAgent:
         # Create Gmail labels if they don't exist
         self.label_id_map = self._initialize_labels()
 
+        # Load processed email state
+        self.state_file = config.STATE_FILE
+        self.processed_emails: Set[str] = self._load_state()
+
         logger.info(
             f"Email Classifier Agent initialized with {config.LLM_PROVIDER} provider"
         )
+        logger.info(f"Loaded {len(self.processed_emails)} processed emails from state")
 
     def _initialize_labels(self) -> Dict[str, str]:
         """
@@ -48,6 +54,46 @@ class EmailClassifierAgent:
         logger.info(f"Initialized {len(label_map)} Gmail labels")
         return label_map
 
+    def _load_state(self) -> Set[str]:
+        """
+        Load processed email IDs from state file.
+
+        Returns:
+            Set of processed email IDs
+        """
+        if not os.path.exists(self.state_file):
+            logger.info(f"No state file found at {self.state_file}, starting fresh")
+            return set()
+
+        try:
+            with open(self.state_file, "r") as f:
+                state_data = json.load(f)
+                processed_ids = set(state_data.get("processed_emails", []))
+                logger.info(
+                    f"Loaded {len(processed_ids)} processed email IDs from {self.state_file}"
+                )
+                return processed_ids
+        except Exception as e:
+            logger.error(f"Error loading state file {self.state_file}: {e}")
+            return set()
+
+    def _save_state(self):
+        """
+        Save processed email IDs to state file.
+        """
+        try:
+            # Ensure directory exists
+            state_dir = os.path.dirname(self.state_file)
+            if state_dir and not os.path.exists(state_dir):
+                os.makedirs(state_dir, exist_ok=True)
+
+            state_data = {"processed_emails": list(self.processed_emails)}
+            with open(self.state_file, "w") as f:
+                json.dump(state_data, f, indent=2)
+            logger.debug(f"State saved to {self.state_file}")
+        except Exception as e:
+            logger.error(f"Error saving state file {self.state_file}: {e}")
+
     def process_email(self, email: Dict) -> bool:
         """
         Process a single email: classify it and apply labels.
@@ -59,6 +105,18 @@ class EmailClassifierAgent:
             True if successfully processed, False otherwise
         """
         try:
+            email_id = email.get("id")
+            if not email_id:
+                logger.error("Email missing ID field")
+                return False
+
+            # Check if already processed
+            if email_id in self.processed_emails:
+                logger.info(
+                    f"Skipping already processed email: {email['subject'][:50]}..."
+                )
+                return True  # Return True since it was successfully handled before
+
             logger.info(f"Processing email: {email['subject'][:50]}...")
 
             # Classify the email
@@ -70,6 +128,9 @@ class EmailClassifierAgent:
 
             if not predicted_labels:
                 logger.warning(f"No labels predicted for email: {email['subject']}")
+                # Still mark as processed to avoid re-attempting
+                self.processed_emails.add(email_id)
+                self._save_state()
                 return False
 
             # Get Gmail label IDs
@@ -96,6 +157,10 @@ class EmailClassifierAgent:
                 logger.warning(
                     f"No valid label IDs found for predicted labels: {predicted_labels}"
                 )
+
+            # Mark as processed and save state
+            self.processed_emails.add(email_id)
+            self._save_state()
 
             return True
 

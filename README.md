@@ -235,7 +235,19 @@ python main.py --log-level ERROR    # Errors only
 
 ## State Persistence
 
-The application maintains a state file (`.email_state.json`) to track which emails have been processed. This prevents reprocessing the same emails after a restart.
+The application maintains a state file (`.email_state.json`) to track which emails have been processed. This **prevents duplicate LLM calls** and saves money by ensuring each email is only classified once, even if it remains unread in your inbox.
+
+### How It Works
+
+- Before processing an email, the agent checks if the email ID is in the state file
+- If already processed, the email is skipped (no LLM call is made)
+- After successfully processing an email, its ID is saved to the state file
+- State persists across restarts, so emails are never reprocessed
+
+This is especially important because:
+- Emails may remain unread even after being classified and labeled
+- The agent continuously polls for unread emails
+- Without state tracking, the same emails would be sent to the LLM repeatedly, wasting money
 
 **Local Development:**
 - State file is stored in the project directory
