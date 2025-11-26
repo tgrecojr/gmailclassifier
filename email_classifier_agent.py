@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict
 from gmail_client import GmailClient
-from llm_factory import create_llm_provider
+from openrouter_classifier import OpenRouterClassifier
 import config
 
 logger = logging.getLogger(__name__)
@@ -24,8 +24,11 @@ class EmailClassifierAgent:
             headless=config.GMAIL_HEADLESS_MODE,
         )
 
-        # Initialize LLM provider (Bedrock, Anthropic, OpenAI, or Ollama)
-        self.classifier = create_llm_provider(config)
+        # Initialize OpenRouter classifier
+        self.classifier = OpenRouterClassifier(
+            api_key=config.OPENROUTER_API_KEY,
+            model=config.OPENROUTER_MODEL
+        )
 
         # Create Gmail labels if they don't exist
         self.label_id_map = self._initialize_labels()
@@ -36,7 +39,7 @@ class EmailClassifierAgent:
         self.processed_emails: Dict[str, str] = self._load_state()
 
         logger.info(
-            f"Email Classifier Agent initialized with {config.LLM_PROVIDER} provider"
+            f"Email Classifier Agent initialized with OpenRouter (model: {config.OPENROUTER_MODEL})"
         )
         logger.info(
             f"Loaded {len(self.processed_emails)} processed emails from state "

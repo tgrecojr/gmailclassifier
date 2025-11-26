@@ -28,7 +28,7 @@ def main():
     os.environ["ANONYMIZED_TELEMETRY"] = "false"
     """Main entry point for the email classifier agent."""
     parser = argparse.ArgumentParser(
-        description="Gmail Email Classifier Agent with multi-LLM provider support"
+        description="Gmail Email Classifier Agent with OpenRouter"
     )
     parser.add_argument(
         "--log-level",
@@ -46,17 +46,8 @@ def main():
     logger.info("=" * 60)
     logger.info("Gmail Email Classifier Agent")
     logger.info("=" * 60)
-    logger.info(f"LLM Provider: {config.LLM_PROVIDER}")
-    if config.LLM_PROVIDER == "bedrock":
-        logger.info(f"AWS Region: {config.AWS_REGION}")
-        logger.info(f"Model: {config.BEDROCK_MODEL_ID}")
-    elif config.LLM_PROVIDER == "anthropic":
-        logger.info(f"Model: {config.ANTHROPIC_MODEL}")
-    elif config.LLM_PROVIDER == "openai":
-        logger.info(f"Model: {config.OPENAI_MODEL}")
-    elif config.LLM_PROVIDER == "ollama":
-        logger.info(f"Model: {config.OLLAMA_MODEL}")
-        logger.info(f"Ollama URL: {config.OLLAMA_BASE_URL}")
+    logger.info(f"LLM Provider: OpenRouter")
+    logger.info(f"Model: {config.OPENROUTER_MODEL}")
     logger.info(f"Labels: {', '.join(config.LABELS)}")
     logger.info(f"Poll Interval: {config.POLL_INTERVAL_SECONDS}s")
     logger.info("=" * 60)

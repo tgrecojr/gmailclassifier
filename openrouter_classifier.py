@@ -1,10 +1,11 @@
 """
-OpenAI API LLM Provider implementation.
+OpenRouter LLM classifier implementation.
+
+Uses OpenRouter API (OpenAI-compatible) to classify emails.
 """
 
 import logging
 from typing import List, Dict
-from llm_provider import LLMProvider
 from llm_utils import (
     construct_email_content,
     construct_classification_prompt,
@@ -15,26 +16,30 @@ from llm_utils import (
 logger = logging.getLogger(__name__)
 
 
-class OpenAIProvider(LLMProvider):
-    """OpenAI API implementation of LLMProvider."""
+class OpenRouterClassifier:
+    """OpenRouter API implementation for email classification."""
 
-    def __init__(self, api_key: str, model: str = "gpt-4-turbo"):
+    def __init__(self, api_key: str, model: str = "anthropic/claude-3.5-sonnet"):
         """
-        Initialize OpenAI provider.
+        Initialize OpenRouter classifier.
 
         Args:
-            api_key: OpenAI API key
-            model: Model ID (default: gpt-4-turbo)
+            api_key: OpenRouter API key
+            model: Model ID (default: anthropic/claude-3.5-sonnet)
+                   See https://openrouter.ai/docs for available models
         """
         try:
             import openai
 
-            self.client = openai.OpenAI(api_key=api_key)
+            self.client = openai.OpenAI(
+                api_key=api_key,
+                base_url="https://openrouter.ai/api/v1",
+            )
             self.model = model
-            logger.info(f"Initialized OpenAI provider with model: {model}")
+            logger.info(f"Initialized OpenRouter classifier with model: {model}")
         except ImportError:
             raise ImportError(
-                "openai package is required for OpenAIProvider. "
+                "openai package is required for OpenRouter. "
                 "Install it with: pip install openai"
             )
 
@@ -42,7 +47,7 @@ class OpenAIProvider(LLMProvider):
         self, email: Dict, classification_prompt: str, available_labels: List[str]
     ) -> List[str]:
         """
-        Classify an email using OpenAI API.
+        Classify an email using OpenRouter API.
 
         Args:
             email: Email dictionary with subject, from, body fields
@@ -59,7 +64,7 @@ class OpenAIProvider(LLMProvider):
                 classification_prompt, available_labels, email_content
             )
 
-            # Call OpenAI API
+            # Call OpenRouter API (OpenAI-compatible)
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -71,7 +76,6 @@ class OpenAIProvider(LLMProvider):
                 ],
                 temperature=0.1,  # Low temperature for more deterministic classification
                 max_tokens=1000,
-                response_format={"type": "json_object"},  # Force JSON response
             )
 
             # Extract text from response
@@ -81,7 +85,7 @@ class OpenAIProvider(LLMProvider):
             labels = parse_labels_from_response(response_text, available_labels)
 
             # Log result
-            log_classification_result(email, labels, "OpenAI")
+            log_classification_result(email, labels, "OpenRouter")
 
             return labels
 
@@ -91,5 +95,5 @@ class OpenAIProvider(LLMProvider):
             )
             return []
         except Exception as e:
-            logger.error(f"Error classifying email with OpenAI: {e}", exc_info=True)
+            logger.error(f"Error classifying email with OpenRouter: {e}", exc_info=True)
             return []

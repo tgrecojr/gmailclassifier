@@ -55,12 +55,12 @@ def mock_gmail_client():
 
 @pytest.fixture
 def mock_llm_provider():
-    """Mock LLM provider."""
-    with patch("email_classifier_agent.create_llm_provider") as mock:
-        provider = Mock()
-        provider.classify_email = Mock(return_value=["AWS", "Github"])
-        mock.return_value = provider
-        yield provider
+    """Mock OpenRouter classifier."""
+    with patch("email_classifier_agent.OpenRouterClassifier") as mock:
+        classifier = Mock()
+        classifier.classify_email = Mock(return_value=["AWS", "Github"])
+        mock.return_value = classifier
+        yield classifier
 
 
 @pytest.mark.unit
