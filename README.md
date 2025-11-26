@@ -5,13 +5,13 @@ An intelligent email classification system that automatically reads, categorizes
 ## Features
 
 - **Automatic Email Processing**: Continuously monitors your Gmail inbox for unread emails
-- **AI-Powered Classification**: Supports multiple LLM providers (AWS Bedrock, Anthropic, OpenAI, Ollama)
+- **AI-Powered Classification**: Uses OpenRouter API for access to multiple AI models (Claude, GPT-4, and more)
 - **Multi-Label Support**: Emails can be assigned multiple labels simultaneously
 - **Gmail Integration**: Seamlessly integrates with Gmail API for reading and labeling emails
 - **Fully Customizable**: Configure your own label categories and classification rules via JSON config file
 - **Continuous Operation**: Runs as a persistent service with configurable polling intervals
 - **State Persistence**: Tracks processed emails to avoid reprocessing after restarts
-- **Privacy Options**: Use local LLMs (Ollama) to keep emails on your machine
+- **Model Flexibility**: Choose from dozens of models via OpenRouter (Claude, GPT-4, Llama, and more)
 
 ## Customizing Labels and Classification
 
@@ -35,75 +35,47 @@ The system uses a JSON configuration file (`classifier_config.json`) to define l
 
 See [Configuration](#configuration) section below for details on customizing your labels.
 
-## Choosing an LLM Provider
+## OpenRouter Configuration
 
-The Gmail Classifier supports multiple LLM providers. Choose the one that best fits your needs:
+This application uses [OpenRouter](https://openrouter.ai/) to provide access to multiple AI models through a single API. OpenRouter offers:
 
-| Provider | Cost | Privacy | Setup Complexity | Best For |
-|----------|------|---------|------------------|----------|
-| **Ollama** | FREE | ⭐⭐⭐ Local | Medium | Privacy-conscious users, free local processing |
-| **Anthropic API** | Paid | Cloud | Easy | Simple setup, direct Claude access |
-| **OpenAI** | Paid | Cloud | Easy | Existing OpenAI users, GPT-4 access |
-| **AWS Bedrock** | Paid | Cloud | Complex | AWS infrastructure users, enterprise |
+- **Access to 100+ models**: Claude, GPT-4, Llama, Gemini, and more
+- **Unified API**: One API key for all models
+- **Competitive pricing**: Pay only for what you use
+- **No vendor lock-in**: Switch models anytime
 
-### Quick Start by Provider
+### Quick Start
 
-**Ollama (Free, Local, Private)**
 ```bash
 # .env
-LLM_PROVIDER=ollama
-OLLAMA_MODEL=llama3
-OLLAMA_BASE_URL=http://localhost:11434
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
 ```
-Requirements: Install [Ollama](https://ollama.ai/) locally and pull a model (`ollama pull llama3`)
 
-**Anthropic Direct API (Easiest Cloud Setup)**
-```bash
-# .env
-LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-xxx
-ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
-```
-Requirements: [Anthropic API key](https://console.anthropic.com/)
+**Popular model options:**
+- `anthropic/claude-3.5-sonnet` - Best for complex classification (default)
+- `anthropic/claude-3-haiku` - Faster and cheaper
+- `openai/gpt-4-turbo` - Alternative high-quality option
+- `meta-llama/llama-3.1-70b-instruct` - Open source option
 
-**OpenAI API**
-```bash
-# .env
-LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-xxx
-OPENAI_MODEL=gpt-4-turbo
-```
-Requirements: [OpenAI API key](https://platform.openai.com/)
-
-**AWS Bedrock**
-```bash
-# .env
-LLM_PROVIDER=bedrock
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-5-20250929-v1:0
-```
-Requirements: AWS account with Bedrock access
+See [OpenRouter Models](https://openrouter.ai/docs#models) for the full list of available models.
 
 ## Prerequisites
 
-### 1. Gmail API Credentials (Required for all providers)
+### 1. OpenRouter API Key
+
+1. Go to [OpenRouter](https://openrouter.ai/)
+2. Sign up for an account
+3. Generate an API key from your dashboard
+4. Add credits to your account (pay-as-you-go pricing)
+
+### 2. Gmail API Credentials
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select an existing one
 3. Enable the Gmail API for your project
 4. Create OAuth 2.0 credentials (Desktop application)
 5. Download the credentials JSON file and save it as `credentials.json` in the project directory
-
-### 2. LLM Provider (Choose one)
-
-Select and configure one of the following providers:
-
-- **Ollama**: Install from [ollama.ai](https://ollama.ai/) and pull a model
-- **Anthropic**: Get API key from [console.anthropic.com](https://console.anthropic.com/)
-- **OpenAI**: Get API key from [platform.openai.com](https://platform.openai.com/)
-- **AWS Bedrock**: Requires AWS account with Bedrock access and IAM permissions
 
 ### 3. Python Environment
 
@@ -122,14 +94,7 @@ cd gmailclassifier
 2. Install dependencies:
 
 ```bash
-# Install core dependencies
 pip install -r requirements.txt
-
-# Install provider-specific dependencies (choose one or more)
-pip install anthropic  # For Anthropic provider
-pip install openai     # For OpenAI provider
-pip install ollama     # For Ollama provider
-# Bedrock dependencies (boto3) are included by default
 ```
 
 3. Copy the example environment file and configure it:
@@ -149,11 +114,9 @@ Then edit `classifier_config.json` to customize your labels and classification p
 5. Edit `.env` with your credentials:
 
 ```bash
-# LLM Provider Selection
-LLM_PROVIDER=bedrock  # Options: bedrock, anthropic, openai, ollama
-
-# Provider-specific configuration (configure the one you're using)
-# See "Choosing an LLM Provider" section above for details
+# OpenRouter API Configuration
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
 
 # Gmail API Configuration
 GMAIL_CREDENTIALS_PATH=credentials.json
@@ -167,8 +130,6 @@ POLL_INTERVAL_SECONDS=60
 MAX_EMAILS_PER_POLL=10
 LOG_LEVEL=INFO
 ```
-
-See [Choosing an LLM Provider](#choosing-an-llm-provider) section for provider-specific configuration details.
 
 6. Place your Gmail `credentials.json` file in the project directory
 
@@ -217,7 +178,7 @@ python main.py
 
 This will:
 - Check for unread emails every 60 seconds (configurable)
-- Classify each email using AWS Bedrock
+- Classify each email using OpenRouter
 - Apply appropriate labels to emails in Gmail
 - Maintain state to avoid reprocessing emails across restarts
 - Log all activities to console
@@ -344,15 +305,15 @@ The application consists of several components:
 - **`main.py`**: Entry point and CLI interface
 - **`email_classifier_agent.py`**: Main orchestration logic
 - **`gmail_client.py`**: Gmail API wrapper for reading/labeling emails
-- **`bedrock_classifier.py`**: AWS Bedrock integration for AI classification
+- **`openrouter_classifier.py`**: OpenRouter API integration for AI classification
 - **`config.py`**: Configuration and environment variables
 
 ### Workflow
 
 1. Agent polls Gmail API for unread emails
 2. For each email, extracts subject, sender, date, and body
-3. Sends email content to AWS Bedrock with classification prompt
-4. Bedrock returns applicable labels in JSON format
+3. Sends email content to OpenRouter with classification prompt
+4. OpenRouter (using configured model) returns applicable labels in JSON format
 5. Agent creates Gmail labels (if they don't exist)
 6. Applies labels to the email in Gmail
 7. Repeats after configured interval
@@ -378,9 +339,9 @@ The application includes robust error handling:
 ## Security Considerations
 
 - Never commit `credentials.json`, `token.json`, or `.env` to version control
-- Store AWS credentials securely (consider using AWS IAM roles instead of access keys)
-- Use environment variables or AWS Secrets Manager for production deployments
-- Regularly rotate AWS access keys
+- Store OpenRouter API key securely
+- Use environment variables or secrets management for production deployments
+- Regularly rotate API keys
 - Review Gmail API OAuth scopes to ensure minimum necessary permissions
 
 ## Docker Deployment
@@ -426,38 +387,30 @@ pip install -r requirements.txt
 
 Download OAuth credentials from Google Cloud Console and save as `credentials.json`.
 
-### "AccessDeniedException: User is not authorized to perform: bedrock:InvokeModel"
+### "Error classifying email with OpenRouter"
 
-Ensure your AWS IAM user/role has Bedrock permissions:
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "bedrock:InvokeModel"
-            ],
-            "Resource": "*"
-        }
-    ]
-}
-```
+Check that:
+1. Your OpenRouter API key is valid and set in `.env`
+2. You have credits in your OpenRouter account
+3. The model ID is correct (see [OpenRouter Models](https://openrouter.ai/docs#models))
+4. Your internet connection is working
 
 ### "Model not found" or "Invalid model ID"
 
-Verify the model ID in `.env` matches an available Bedrock model in your region. Check the [AWS Bedrock documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) for available models.
+Verify the model ID in `.env` matches an available OpenRouter model. Check the [OpenRouter Models documentation](https://openrouter.ai/docs#models) for available models.
 
-## AWS Bedrock Pricing
+## OpenRouter Pricing
 
-Be aware of AWS Bedrock pricing for Claude models:
-- Charged per input/output token
-- Monitor usage in AWS Cost Explorer
-- Consider setting up billing alerts
+OpenRouter pricing varies by model:
+- **Claude 3.5 Sonnet**: ~$0.003-0.015 per email classification
+- **Claude 3 Haiku**: ~$0.001-0.005 per email (cheaper)
+- **GPT-4 Turbo**: ~$0.01-0.03 per email
+- **Llama 3.1 70B**: ~$0.001-0.005 per email (open source)
 
-Typical costs for email classification:
-- ~500-1000 tokens per email classification
-- Claude 3.5 Sonnet: ~$0.003-0.015 per email
+Typical usage for email classification:
+- ~500-1000 tokens per email
+- Pay only for what you use
+- Monitor usage in [OpenRouter Dashboard](https://openrouter.ai/activity)
 
 ## License
 
@@ -471,5 +424,5 @@ Feel free to submit issues, feature requests, or pull requests.
 
 For issues related to:
 - Gmail API: [Google Gmail API Documentation](https://developers.google.com/gmail/api)
-- AWS Bedrock: [AWS Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)
+- OpenRouter: [OpenRouter Documentation](https://openrouter.ai/docs)
 - This application: Open an issue in the repository
