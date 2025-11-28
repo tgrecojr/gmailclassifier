@@ -27,7 +27,9 @@ class EmailClassifierAgent:
         # Initialize OpenRouter classifier
         self.classifier = OpenRouterClassifier(
             api_key=config.OPENROUTER_API_KEY,
-            model=config.OPENROUTER_MODEL
+            model=config.OPENROUTER_MODEL,
+            temperature=config.OPENROUTER_TEMPERATURE,
+            max_tokens=config.OPENROUTER_MAX_TOKENS,
         )
 
         # Create Gmail labels if they don't exist
