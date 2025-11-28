@@ -6,11 +6,12 @@ services:
     container_name: gmail-classifier
     restart: unless-stopped
 
-    # Mount credentials, token, and config as secrets
+    # Mount credentials, token, and configs as secrets
     volumes:
       - ./credentials.json:/app/credentials.json:ro
       - ./token.json:/app/token.json:ro
       - ./classifier_config.json:/app/classifier_config.json:ro
+      - ./model_config.json:/app/model_config.json:ro
       - ./data:/app/data
 
     # Load environment variables from .env file

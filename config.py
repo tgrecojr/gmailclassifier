@@ -1,6 +1,5 @@
 import os
 import json
-from typing import List
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -51,6 +50,56 @@ def load_classifier_config(config_path: str) -> dict:
         raise ValueError(f"Invalid JSON in config file: {e}")
 
 
+def load_model_config(config_path: str) -> dict:
+    """
+    Load model configuration from JSON file.
+
+    Args:
+        config_path: Path to the model configuration JSON file
+
+    Returns:
+        Dictionary containing 'model', 'temperature', and 'max_tokens'
+
+    Raises:
+        FileNotFoundError: If config file doesn't exist
+        ValueError: If config file is invalid
+    """
+    path = Path(config_path)
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Model config file not found: {config_path}\n"
+            f"Please create it or copy from model_config.example.json"
+        )
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+        # Validate required fields
+        if "model" not in config:
+            raise ValueError("Config file must contain 'model' field")
+        if "temperature" not in config:
+            raise ValueError("Config file must contain 'temperature' field")
+        if "max_tokens" not in config:
+            raise ValueError("Config file must contain 'max_tokens' field")
+        if not isinstance(config["model"], str):
+            raise ValueError("'model' must be a string")
+        if not isinstance(config["temperature"], (int, float)):
+            raise ValueError("'temperature' must be a number")
+        if not isinstance(config["max_tokens"], int):
+            raise ValueError("'max_tokens' must be an integer")
+        if config["temperature"] < 0 or config["temperature"] > 2:
+            raise ValueError("'temperature' must be between 0 and 2")
+        if config["max_tokens"] <= 0:
+            raise ValueError("'max_tokens' must be greater than 0")
+
+        return config
+
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in config file: {e}")
+
+
 # Classifier Configuration
 CLASSIFIER_CONFIG_PATH = os.getenv("CLASSIFIER_CONFIG_PATH", "classifier_config.json")
 
@@ -66,7 +115,40 @@ except (FileNotFoundError, ValueError) as e:
 
 # OpenRouter API Configuration
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet")
+
+# Model Configuration - Load from file if available, otherwise from env vars
+MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH")
+
+if MODEL_CONFIG_PATH:
+    try:
+        _model_config = load_model_config(MODEL_CONFIG_PATH)
+        OPENROUTER_MODEL = _model_config["model"]
+        OPENROUTER_TEMPERATURE = _model_config["temperature"]
+        OPENROUTER_MAX_TOKENS = _model_config["max_tokens"]
+        print(f"Loaded model configuration from {MODEL_CONFIG_PATH}")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error loading model config: {e}")
+        print("Falling back to environment variables.")
+        OPENROUTER_MODEL = os.getenv(
+            "OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet"
+        )
+        OPENROUTER_TEMPERATURE = float(
+            os.getenv("OPENROUTER_TEMPERATURE", "0.0")
+        )
+        OPENROUTER_MAX_TOKENS = int(
+            os.getenv("OPENROUTER_MAX_TOKENS", "1000")
+        )
+else:
+    # Fallback to environment variables
+    OPENROUTER_MODEL = os.getenv(
+        "OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet"
+    )
+    OPENROUTER_TEMPERATURE = float(
+        os.getenv("OPENROUTER_TEMPERATURE", "0.0")
+    )
+    OPENROUTER_MAX_TOKENS = int(
+        os.getenv("OPENROUTER_MAX_TOKENS", "1000")
+    )
 
 # Gmail Configuration
 GMAIL_CREDENTIALS_PATH = os.getenv("GMAIL_CREDENTIALS_PATH", "credentials.json")

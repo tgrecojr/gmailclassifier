@@ -60,6 +60,53 @@ OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
 
 See [OpenRouter Models](https://openrouter.ai/docs#models) for the full list of available models.
 
+### Model Configuration
+
+The application supports two ways to configure the model settings:
+
+**Option 1: Model Configuration File (Recommended for Docker)**
+
+Create a `model_config.json` file to externalize model settings. This is especially useful for Docker deployments where you can mount the config file and change model parameters without recreating the container:
+
+```bash
+cp model_config.example.json model_config.json
+```
+
+Then edit `model_config.json`:
+```json
+{
+  "model": "anthropic/claude-3.5-sonnet",
+  "temperature": 0.0,
+  "max_tokens": 1000
+}
+```
+
+Set the path in your `.env` file:
+```bash
+MODEL_CONFIG_PATH=model_config.json
+```
+
+**Benefits:**
+- Change model settings without recreating Docker containers (just restart)
+- Easy A/B testing of different models in production
+- Clear separation between secrets (.env) and model config
+
+**Option 2: Environment Variables (Fallback)**
+
+If `MODEL_CONFIG_PATH` is not set, the application falls back to environment variables:
+
+```bash
+# .env
+OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
+OPENROUTER_TEMPERATURE=0.0
+OPENROUTER_MAX_TOKENS=1000
+```
+
+**Configuration Parameters:**
+- `model`: OpenRouter model ID (see [available models](https://openrouter.ai/docs#models))
+- `temperature`: Sampling temperature (0.0-2.0, lower = more deterministic)
+- `max_tokens`: Maximum tokens in response (typically 1000 is sufficient)
+
 ## Prerequisites
 
 ### 1. OpenRouter API Key
@@ -111,7 +158,15 @@ cp classifier_config.example.json classifier_config.json
 
 Then edit `classifier_config.json` to customize your labels and classification prompt.
 
-5. Edit `.env` with your credentials:
+5. Create your model configuration (optional, but recommended):
+
+```bash
+cp model_config.example.json model_config.json
+```
+
+Then edit `model_config.json` to configure model settings (model, temperature, max_tokens).
+
+6. Edit `.env` with your credentials:
 
 ```bash
 # OpenRouter API Configuration
@@ -131,7 +186,7 @@ MAX_EMAILS_PER_POLL=10
 LOG_LEVEL=INFO
 ```
 
-6. Place your Gmail `credentials.json` file in the project directory
+7. Place your Gmail `credentials.json` file in the project directory
 
 ## Usage
 
@@ -365,12 +420,14 @@ docker-compose logs -f
 - `./credentials.json:/app/credentials.json` - Gmail OAuth credentials (read-only)
 - `./token.json:/app/token.json` - Gmail OAuth token (read-only)
 - `./classifier_config.json:/app/classifier_config.json` - Labels and classification rules (read-only)
+- `./model_config.json:/app/model_config.json` - Model configuration (read-only)
 - `./data:/app/data` - State persistence directory (stores `.email_state.json`)
 
 **Notes:**
 - The `data` volume is **required** to maintain state across container restarts
 - Without it, the agent would reprocess all unread emails every time the container restarts
 - Edit `classifier_config.json` to customize labels; restart the container to apply changes
+- **Edit `model_config.json` to change model settings (model, temperature, max_tokens) and just restart - no need to recreate the container!**
 
 For detailed deployment instructions (AWS ECS, Kubernetes, systemd), see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 

@@ -19,7 +19,13 @@ logger = logging.getLogger(__name__)
 class OpenRouterClassifier:
     """OpenRouter API implementation for email classification."""
 
-    def __init__(self, api_key: str, model: str = "anthropic/claude-3.5-sonnet"):
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "anthropic/claude-3.5-sonnet",
+        temperature: float = 0.0,
+        max_tokens: int = 1000,
+    ):
         """
         Initialize OpenRouter classifier.
 
@@ -27,6 +33,8 @@ class OpenRouterClassifier:
             api_key: OpenRouter API key
             model: Model ID (default: anthropic/claude-3.5-sonnet)
                    See https://openrouter.ai/docs for available models
+            temperature: Sampling temperature (0.0-2.0, default: 0.0)
+            max_tokens: Maximum tokens in response (default: 1000)
         """
         try:
             import openai
@@ -36,7 +44,12 @@ class OpenRouterClassifier:
                 base_url="https://openrouter.ai/api/v1",
             )
             self.model = model
-            logger.info(f"Initialized OpenRouter classifier with model: {model}")
+            self.temperature = temperature
+            self.max_tokens = max_tokens
+            logger.info(
+                f"Initialized OpenRouter classifier with model: {model}, "
+                f"temperature: {temperature}, max_tokens: {max_tokens}"
+            )
         except ImportError:
             raise ImportError(
                 "openai package is required for OpenRouter. "
@@ -74,8 +87,8 @@ class OpenRouterClassifier:
                     },
                     {"role": "user", "content": full_prompt},
                 ],
-                temperature=0.1,  # Low temperature for more deterministic classification
-                max_tokens=1000,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
             )
 
             # Extract text from response
