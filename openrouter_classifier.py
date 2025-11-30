@@ -42,6 +42,10 @@ class OpenRouterClassifier:
             self.client = openai.OpenAI(
                 api_key=api_key,
                 base_url="https://openrouter.ai/api/v1",
+                default_headers={
+                    "HTTP-Referer": ("https://github.com/tgrecojr/gmailclassifier"),
+                    "X-Title": "gmailclassifier",
+                },
             )
             self.model = model
             self.temperature = temperature
