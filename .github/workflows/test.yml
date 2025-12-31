@@ -43,7 +43,7 @@ jobs:
             -m unit
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           file: ./coverage.xml
           fail_ci_if_error: false
@@ -58,7 +58,7 @@ jobs:
 
       - name: Upload coverage HTML report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-report
           path: htmlcov/
