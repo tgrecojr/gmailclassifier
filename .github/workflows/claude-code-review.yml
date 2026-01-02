@@ -13,18 +13,19 @@ on:
 jobs:
   claude-review:
     # Skip automated PRs from dependency update bots
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+
     if: |
       github.event.pull_request.user.login != 'renovate[bot]' &&
       github.event.pull_request.user.login != 'mend-bolt-for-github[bot]' &&
       github.event.pull_request.user.login != 'renovate' &&
       github.event.pull_request.user.login != 'dependabot[bot]'
-
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-      issues: read
-      id-token: write
 
     steps:
       - name: Checkout repository
