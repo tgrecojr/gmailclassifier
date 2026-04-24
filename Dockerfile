@@ -1,6 +1,6 @@
 # Gmail Email Classifier - Dockerfile
 
-FROM python:3.14-slim@sha256:1a3c6dbfd2173971abba880c3cc2ec4643690901f6ad6742d0827bae6cefc925
+FROM python:3.14-slim@sha256:5b3879b6f3cb77e712644d50262d05a7c146b7312d784a18eff7ff5462e77033
 
 # Set working directory
 WORKDIR /app
