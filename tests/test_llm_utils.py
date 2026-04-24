@@ -18,6 +18,7 @@ from llm_utils import (
 )
 
 
+@pytest.mark.unit
 class TestConstructEmailContent:
     """Test email content construction."""
 
@@ -83,6 +84,7 @@ class TestConstructEmailContent:
         assert "Body:\nNo content" in result
 
 
+@pytest.mark.unit
 class TestConstructClassificationPrompt:
     """Test classification prompt construction."""
 
@@ -115,6 +117,7 @@ class TestConstructClassificationPrompt:
             assert label in result
 
 
+@pytest.mark.unit
 class TestParseLabelsParsing:
     """Test JSON parsing edge cases."""
 
@@ -301,6 +304,7 @@ These labels indicate the primary topics."""
         assert result == ["AWS", "AWS", "Finance"]
 
 
+@pytest.mark.unit
 class TestLogClassificationResult:
     """Test classification result logging."""
 
