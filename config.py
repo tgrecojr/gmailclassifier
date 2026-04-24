@@ -129,26 +129,14 @@ if MODEL_CONFIG_PATH:
     except (FileNotFoundError, ValueError) as e:
         print(f"Error loading model config: {e}")
         print("Falling back to environment variables.")
-        OPENROUTER_MODEL = os.getenv(
-            "OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet"
-        )
-        OPENROUTER_TEMPERATURE = float(
-            os.getenv("OPENROUTER_TEMPERATURE", "0.0")
-        )
-        OPENROUTER_MAX_TOKENS = int(
-            os.getenv("OPENROUTER_MAX_TOKENS", "1000")
-        )
+        OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet")
+        OPENROUTER_TEMPERATURE = float(os.getenv("OPENROUTER_TEMPERATURE", "0.0"))
+        OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "1000"))
 else:
     # Fallback to environment variables
-    OPENROUTER_MODEL = os.getenv(
-        "OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet"
-    )
-    OPENROUTER_TEMPERATURE = float(
-        os.getenv("OPENROUTER_TEMPERATURE", "0.0")
-    )
-    OPENROUTER_MAX_TOKENS = int(
-        os.getenv("OPENROUTER_MAX_TOKENS", "1000")
-    )
+    OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet")
+    OPENROUTER_TEMPERATURE = float(os.getenv("OPENROUTER_TEMPERATURE", "0.0"))
+    OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "1000"))
 
 # Gmail Configuration
 GMAIL_CREDENTIALS_PATH = os.getenv("GMAIL_CREDENTIALS_PATH", "credentials.json")
