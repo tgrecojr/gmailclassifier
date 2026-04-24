@@ -8,7 +8,6 @@ import os
 from typing import Dict, List
 from unittest.mock import Mock
 
-
 # Sample test data
 TEST_EMAIL = {
     "id": "test123",
