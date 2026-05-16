@@ -41,11 +41,12 @@ class TestAuthenticate:
         creds.valid = True
         creds.expired = False
 
-        with patch("gmail_client.os.path.exists", return_value=True), patch(
-            "gmail_client.open", mock_open(read_data=b"irrelevant")
-        ), patch("gmail_client.pickle.load", return_value=creds), patch(
-            "gmail_client.build"
-        ) as mock_build:
+        with (
+            patch("gmail_client.os.path.exists", return_value=True),
+            patch("gmail_client.open", mock_open(read_data=b"irrelevant")),
+            patch("gmail_client.pickle.load", return_value=creds),
+            patch("gmail_client.build") as mock_build,
+        ):
             mock_build.return_value = "gmail-service"
             c = GmailClient("creds.json", "token.json", ["scope"])
 
@@ -58,12 +59,12 @@ class TestAuthenticate:
         creds.expired = True
         creds.refresh_token = "refresh"
 
-        with patch("gmail_client.os.path.exists", return_value=True), patch(
-            "gmail_client.open", mock_open(read_data=b"irrelevant")
-        ), patch("gmail_client.pickle.load", return_value=creds), patch(
-            "gmail_client.pickle.dump"
-        ), patch(
-            "gmail_client.build"
+        with (
+            patch("gmail_client.os.path.exists", return_value=True),
+            patch("gmail_client.open", mock_open(read_data=b"irrelevant")),
+            patch("gmail_client.pickle.load", return_value=creds),
+            patch("gmail_client.pickle.dump"),
+            patch("gmail_client.build"),
         ):
             GmailClient("creds.json", "token.json", ["scope"])
 
@@ -72,12 +73,12 @@ class TestAuthenticate:
     def test_runs_oauth_flow_when_no_token(self):
         new_creds = MagicMock()
 
-        with patch("gmail_client.os.path.exists", return_value=False), patch(
-            "gmail_client.InstalledAppFlow"
-        ) as mock_flow_cls, patch("gmail_client.open", mock_open()), patch(
-            "gmail_client.pickle.dump"
-        ) as mock_dump, patch(
-            "gmail_client.build"
+        with (
+            patch("gmail_client.os.path.exists", return_value=False),
+            patch("gmail_client.InstalledAppFlow") as mock_flow_cls,
+            patch("gmail_client.open", mock_open()),
+            patch("gmail_client.pickle.dump") as mock_dump,
+            patch("gmail_client.build"),
         ):
             mock_flow = MagicMock()
             mock_flow.run_local_server.return_value = new_creds
@@ -92,15 +93,16 @@ class TestAuthenticate:
     def test_headless_mode_uses_console_flow(self):
         new_creds = MagicMock()
 
-        with patch("gmail_client.os.path.exists", return_value=False), patch(
-            "gmail_client.InstalledAppFlow"
-        ) as mock_flow_cls, patch("gmail_client.open", mock_open()), patch(
-            "gmail_client.pickle.dump"
-        ), patch(
-            "gmail_client.build"
-        ), patch.object(
-            GmailClient, "_run_console_flow", return_value=new_creds
-        ) as mock_console:
+        with (
+            patch("gmail_client.os.path.exists", return_value=False),
+            patch("gmail_client.InstalledAppFlow") as mock_flow_cls,
+            patch("gmail_client.open", mock_open()),
+            patch("gmail_client.pickle.dump"),
+            patch("gmail_client.build"),
+            patch.object(
+                GmailClient, "_run_console_flow", return_value=new_creds
+            ) as mock_console,
+        ):
             mock_flow_cls.from_client_secrets_file.return_value = MagicMock()
             GmailClient("creds.json", "token.json", ["scope"], headless=True)
 
