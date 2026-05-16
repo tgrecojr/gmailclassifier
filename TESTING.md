@@ -4,17 +4,18 @@
 
 This project uses pytest for testing with comprehensive unit test coverage for all LLM providers and utility functions.
 
+> **Note:** All commands below assume you've set up the environment with `uv sync --frozen`. Prefix any bare `pytest`, `black`, `flake8`, or `python` command with `uv run` so it executes inside the project's `.venv`.
+
 ## Requirements
 
-- Python 3.13
-- pytest
-- pytest-cov
-- pytest-mock
+- Python 3.14
+- [uv](https://docs.astral.sh/uv/)
+- pytest, pytest-cov, pytest-mock (installed via `uv sync`)
 
 Install test dependencies:
 
 ```bash
-pip install -r requirements-dev.txt
+uv sync --frozen
 ```
 
 ## Running Tests
@@ -118,7 +119,7 @@ See `.github/workflows/test.yml` for CI configuration.
 
 ### CI Workflow
 
-- Runs on Python 3.13
+- Runs on Python 3.14
 - Executes all unit tests
 - Generates coverage reports
 - Uploads coverage to Codecov
@@ -210,8 +211,7 @@ Planned test additions (see issue #5):
 If you see `ModuleNotFoundError`, ensure all dependencies are installed:
 
 ```bash
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+uv sync --frozen
 ```
 
 ### Coverage not updating
@@ -220,7 +220,7 @@ Clear coverage cache:
 
 ```bash
 rm -rf .coverage htmlcov/
-pytest tests/ --cov=.
+uv run pytest tests/ --cov=.
 ```
 
 ### Tests failing on CI but passing locally
@@ -228,7 +228,7 @@ pytest tests/ --cov=.
 Check Python version consistency:
 
 ```bash
-python --version  # Should be 3.13.x
+uv run python --version  # Should be 3.14.x
 ```
 
 ## Resources

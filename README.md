@@ -126,8 +126,8 @@ OPENROUTER_MAX_TOKENS=1000
 
 ### 3. Python Environment
 
-- Python 3.11 or higher
-- pip package manager
+- Python 3.14 or higher
+- [uv](https://docs.astral.sh/uv/) for dependency management
 
 ## Installation
 
@@ -141,7 +141,7 @@ cd gmailclassifier
 2. Install dependencies:
 
 ```bash
-pip install -r requirements.txt
+uv sync --frozen
 ```
 
 3. Copy the example environment file and configure it:
@@ -197,7 +197,7 @@ LOG_LEVEL=INFO
 On the first run, the application will open a browser window for Gmail OAuth authentication:
 
 ```bash
-python main.py
+uv run python main.py
 ```
 
 Follow the prompts to authorize the application to access your Gmail account. The token will be saved to `token.json` for future use.
@@ -213,7 +213,7 @@ For deployment on servers or in Docker without a browser:
 
 2. Run the application:
    ```bash
-   python main.py
+   uv run python main.py
    ```
 
 3. Copy the URL shown and open it in any browser
@@ -228,7 +228,7 @@ See **[DEPLOYMENT.md](DEPLOYMENT.md)** for detailed headless and Docker deployme
 Run the agent continuously to monitor and process emails:
 
 ```bash
-python main.py
+uv run python main.py
 ```
 
 This will:
@@ -243,10 +243,10 @@ This will:
 Control the verbosity of logging:
 
 ```bash
-python main.py --log-level DEBUG    # Detailed debug information
-python main.py --log-level INFO     # General information (default)
-python main.py --log-level WARNING  # Warnings only
-python main.py --log-level ERROR    # Errors only
+uv run python main.py --log-level DEBUG    # Detailed debug information
+uv run python main.py --log-level INFO     # General information (default)
+uv run python main.py --log-level WARNING  # Warnings only
+uv run python main.py --log-level ERROR    # Errors only
 ```
 
 ## State Persistence
@@ -405,7 +405,7 @@ Quick start with Docker:
 
 ```bash
 # 1. Generate token locally first (easier)
-python main.py
+uv run python main.py
 
 # After authentication completes, stop the agent (Ctrl+C)
 
@@ -437,7 +437,7 @@ For detailed deployment instructions (AWS ECS, Kubernetes, systemd), see **[DEPL
 
 Install dependencies:
 ```bash
-pip install -r requirements.txt
+uv sync --frozen
 ```
 
 ### "Error: credentials.json not found"
