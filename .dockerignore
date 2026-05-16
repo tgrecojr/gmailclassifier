@@ -17,7 +17,7 @@ build/
 venv/
 ENV/
 env/
-.venv
+.venv/
 
 # IDE
 .vscode/
@@ -45,6 +45,16 @@ docker-compose.yml
 # OS
 .DS_Store
 Thumbs.db
+
+# Test artifacts
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Agent / tooling dirs
+.claude/
+.serena/
 
 # Test data
 data/

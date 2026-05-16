@@ -33,7 +33,7 @@ The easiest approach is to generate the token on your local machine:
 
 ```bash
 # On your local machine with a browser
-python main.py
+uv run python main.py
 
 # After authentication completes, stop the agent (Ctrl+C)
 # This creates token.json - copy it to your server
@@ -51,7 +51,7 @@ If you need to generate the token directly on the server:
 
 2. Run the application:
    ```bash
-   python main.py
+   uv run python main.py
    ```
 
 3. The app will print a URL:
@@ -403,8 +403,8 @@ After=network.target
 Type=simple
 User=your-user
 WorkingDirectory=/home/your-user/gmailclassifier
-Environment="PATH=/home/your-user/gmailclassifier/venv/bin"
-ExecStart=/home/your-user/gmailclassifier/venv/bin/python main.py
+Environment="PATH=/home/your-user/gmailclassifier/.venv/bin"
+ExecStart=/home/your-user/gmailclassifier/.venv/bin/python main.py
 Restart=always
 RestartSec=10
 
