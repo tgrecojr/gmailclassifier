@@ -37,5 +37,5 @@ ENV PATH="/app/.venv/bin:$PATH" \
     MODEL_CONFIG_PATH=/app/model_config.json \
     STATE_FILE=/app/data/.email_state.json
 
-ENTRYPOINT ["/app/.venv/bin/python"]
-CMD ["main.py"]
+ENTRYPOINT []
+CMD ["python", "main.py"]
