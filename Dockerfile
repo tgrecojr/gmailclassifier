@@ -5,7 +5,7 @@ FROM cgr.dev/chainguard/python:latest-dev@sha256:a38c998396e846c009bcabfc70702f6
 
 USER root
 
-COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:ff07b86af50d4d9391d9daf4ff89ce427bc544f9aae87057e69a1cc0aa369946 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:d0a0a753ab981624b49c97abc98821c1c09f4ca69d1ef5cee69c501be3d88479 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
