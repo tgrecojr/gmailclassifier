@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 RUN mkdir -p /app/data && chown -R nonroot:nonroot /app
 
-FROM cgr.dev/chainguard/python:latest@sha256:77d9f82d47d038bbda974e237ab65a27fdc37fe470189064612ab11b5178eb51
+FROM cgr.dev/chainguard/python:latest@sha256:522a5ff629869272271784d864da372e03612822902878ecb20b4afc9e797779
 
 WORKDIR /app
 
