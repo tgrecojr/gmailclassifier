@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.25@sha256:0adf442eae370b6087e08edc7c50b552d80ddf261576f4ebd6421006b2461f12
 # Gmail Email Classifier - Dockerfile
 
-FROM cgr.dev/chainguard/python:latest-dev@sha256:bee63d1fd86c4b31dd2df85bb383be142e8067486e3d469265edb850af93e8e4 AS builder
+FROM cgr.dev/chainguard/python:latest-dev@sha256:5233e2961d13485e80cd9adc5515cf4242dc43d23045a6540466eee82764879b AS builder
 
 USER root
 
