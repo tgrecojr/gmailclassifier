@@ -30,7 +30,7 @@ AutoModelForSequenceClassification.from_pretrained('${INJECTION_ML_MODEL}')"
 
 RUN mkdir -p /app/data && chown -R nonroot:nonroot /app
 
-FROM cgr.dev/chainguard/python:latest@sha256:1bd5d5a1efa2802a5467a4c1faf54e74150a9c88a8a454cef8f7b11592ea91d9
+FROM cgr.dev/chainguard/python:latest@sha256:4aa7dd68e9254e820eafe70c60c620730b9ffb45e6f35353f3c886e50d8aaea3
 
 WORKDIR /app
 
