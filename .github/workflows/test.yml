@@ -36,7 +36,7 @@ jobs:
             -m unit
 
       - name: Cache injection detection model
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/huggingface
           key: hf-model-protectai-deberta-v3-base-prompt-injection-v2
