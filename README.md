@@ -12,6 +12,19 @@ An intelligent email classification system that automatically reads, categorizes
 - **Continuous Operation**: Runs as a persistent service with configurable polling intervals
 - **State Persistence**: Tracks processed emails to avoid reprocessing after restarts
 - **Model Flexibility**: Choose from dozens of models via OpenRouter (Claude, GPT-4, Llama, and more)
+- **Prompt Injection Protection**: Scans every email locally before it reaches the LLM; suspicious emails are quarantined with a review label instead of being classified
+
+## Prompt Injection Protection
+
+Emails are untrusted input, and a crafted email could try to embed instructions aimed at the classification model. Before any email content is sent to OpenRouter, the guard runs three local defenses:
+
+1. **Sanitization**: Unicode normalization, removal of invisible characters (zero-width, bidi controls) that can hide instructions, and HTML-to-text conversion that drops hidden elements (`display:none`, zero font size, scripts).
+2. **Heuristic detection**: Deterministic patterns for known injection markers (instruction overrides, role spoofing, special tokens, output planting).
+3. **Local ML detection**: A prompt-injection classifier model runs on-device (no API calls) to catch novel phrasings.
+
+Flagged emails are **never sent to OpenRouter**. They receive the quarantine label (default: `Suspicious`), stay in your inbox for review, and are marked processed. The classification prompt itself is also hardened: instructions live in the system message, and email content is delimited by per-request random boundary markers the model is told to treat strictly as data. Model responses are validated against your configured label allowlist as a final backstop.
+
+Configure via `INJECTION_GUARD_ENABLED`, `INJECTION_QUARANTINE_LABEL`, `INJECTION_ML_ENABLED`, `INJECTION_ML_MODEL`, and `INJECTION_ML_THRESHOLD` (see Installation).
 
 ## Customizing Labels and Classification
 
@@ -184,6 +197,13 @@ CLASSIFIER_CONFIG_PATH=classifier_config.json
 POLL_INTERVAL_SECONDS=60
 MAX_EMAILS_PER_POLL=10
 LOG_LEVEL=INFO
+
+# Prompt Injection Guard (all optional, defaults shown)
+INJECTION_GUARD_ENABLED=true
+INJECTION_QUARANTINE_LABEL=Suspicious
+INJECTION_ML_ENABLED=true
+INJECTION_ML_MODEL=protectai/deberta-v3-base-prompt-injection-v2
+INJECTION_ML_THRESHOLD=0.98
 ```
 
 7. Place your Gmail `credentials.json` file in the project directory

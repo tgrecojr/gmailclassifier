@@ -35,6 +35,19 @@ jobs:
             -v \
             -m unit
 
+      - name: Cache injection detection model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-model-protectai-deberta-v3-base-prompt-injection-v2
+
+      - name: Run injection guard efficacy tests
+        run: |
+          uv run pytest tests/test_injection_guard_efficacy.py \
+            -v \
+            -m slow \
+            --no-cov
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:

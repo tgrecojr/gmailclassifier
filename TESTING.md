@@ -103,6 +103,33 @@ Run only unit tests:
 pytest -m unit
 ```
 
+## Injection Guard Efficacy Suite
+
+`tests/test_injection_guard_efficacy.py` (marked `slow` + `integration`)
+runs the REAL prompt-injection detection model against a small corpus of
+realistic attack and benign emails — one sample per technique. It proves
+the guard works end-to-end rather than just testing the plumbing:
+
+- **TestAttackDetection**: every attack technique must be flagged
+  (instruction overrides, Unicode evasion, role spoofing, special tokens,
+  output planting, model addressing, non-English, base64 payloads).
+- **TestBenignPassthrough**: realistic legitimate emails must NOT be
+  flagged, including hard negatives that score high with the ML model
+  (flight itineraries, AI product news, an email *about* prompt injection).
+- **TestAcceptedFalsePositives**: emails we knowingly quarantine
+  (e.g., password-reset phrasing) — documented trade-offs, not bugs.
+- **TestKnownLimitations**: evasions the guard does not catch, marked
+  `xfail`. If one starts passing, detection improved — promote it to
+  the attack corpus.
+
+The suite downloads the detection model on first run (~700 MB, cached in
+`~/.cache/huggingface`) and skips automatically if the model is
+unavailable. Skip it locally with:
+
+```bash
+pytest -m "not slow"
+```
+
 ## Coverage Reports
 
 After running tests with coverage, view the HTML report:

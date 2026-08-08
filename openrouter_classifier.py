@@ -8,7 +8,7 @@ import logging
 from typing import List, Dict
 from llm_utils import (
     construct_email_content,
-    construct_classification_prompt,
+    build_classification_messages,
     parse_labels_from_response,
     log_classification_result,
 )
@@ -75,22 +75,17 @@ class OpenRouterClassifier:
             List of applicable label names
         """
         try:
-            # Construct email content and full prompt using shared utilities
+            # Construct hardened messages: instructions in the system
+            # message, untrusted email content delimited in the user message
             email_content = construct_email_content(email)
-            full_prompt = construct_classification_prompt(
+            messages = build_classification_messages(
                 classification_prompt, available_labels, email_content
             )
 
             # Call OpenRouter API (OpenAI-compatible)
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an email classification assistant. Respond only with valid JSON.",
-                    },
-                    {"role": "user", "content": full_prompt},
-                ],
+                messages=messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
