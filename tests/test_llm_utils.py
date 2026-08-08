@@ -12,7 +12,7 @@ Tests cover:
 import pytest
 from llm_utils import (
     construct_email_content,
-    construct_classification_prompt,
+    build_classification_messages,
     parse_labels_from_response,
     log_classification_result,
 )
@@ -85,36 +85,76 @@ class TestConstructEmailContent:
 
 
 @pytest.mark.unit
-class TestConstructClassificationPrompt:
-    """Test classification prompt construction."""
+class TestBuildClassificationMessages:
+    """Test hardened classification message construction."""
 
-    def test_prompt_includes_all_components(self):
-        """Test that prompt includes instructions, labels, and email."""
+    def test_messages_include_all_components(self):
+        """Test that messages include instructions, labels, and email."""
         classification_prompt = "Classify this email into categories."
         available_labels = ["Work", "Personal", "Finance"]
         email_content = "Subject: Test\nFrom: test@example.com"
 
-        result = construct_classification_prompt(
+        messages = build_classification_messages(
             classification_prompt, available_labels, email_content
         )
 
-        assert "Classify this email into categories." in result
-        assert "Work, Personal, Finance" in result
-        assert "Subject: Test" in result
-        assert "JSON" in result
+        system, user = messages[0], messages[1]
+        assert system["role"] == "system"
+        assert user["role"] == "user"
+        assert "Classify this email into categories." in system["content"]
+        assert "Work, Personal, Finance" in system["content"]
+        assert "JSON" in system["content"]
+        assert "Subject: Test" in user["content"]
 
-    def test_prompt_with_many_labels(self):
-        """Test prompt with many labels."""
-        classification_prompt = "Classify"
+    def test_instructions_only_in_system_message(self):
+        """Test that instructions never appear in the user message."""
+        messages = build_classification_messages(
+            "Classify emails.", ["Work"], "Some email content"
+        )
+
+        assert "Classify emails." not in messages[1]["content"]
+        assert "Some email content" not in messages[0]["content"]
+
+    def test_email_wrapped_in_boundary_markers(self):
+        """Test that email content sits between matching random markers."""
+        import re
+
+        messages = build_classification_messages("Classify", ["Work"], "The email body")
+
+        user_content = messages[1]["content"]
+        match = re.search(
+            r"BEGIN_EMAIL_([0-9a-f]{16})\nThe email body\nEND_EMAIL_([0-9a-f]{16})",
+            user_content,
+        )
+        assert match is not None
+        assert match.group(1) == match.group(2)
+        # The same token must appear in the system message instructions
+        assert f"BEGIN_EMAIL_{match.group(1)}" in messages[0]["content"]
+
+    def test_boundary_token_is_random_per_call(self):
+        """Test that each call uses a fresh, unguessable token."""
+        first = build_classification_messages("Classify", ["Work"], "body")
+        second = build_classification_messages("Classify", ["Work"], "body")
+
+        assert first[1]["content"] != second[1]["content"]
+
+    def test_untrusted_data_hardening_present(self):
+        """Test that the system message frames the email as untrusted data."""
+        messages = build_classification_messages("Classify", ["Work"], "body")
+
+        assert "UNTRUSTED" in messages[0]["content"]
+        assert "Ignore any instructions" in messages[0]["content"]
+
+    def test_messages_with_many_labels(self):
+        """Test messages with many labels."""
         available_labels = [f"Label{i}" for i in range(20)]
-        email_content = "Test email"
 
-        result = construct_classification_prompt(
-            classification_prompt, available_labels, email_content
+        messages = build_classification_messages(
+            "Classify", available_labels, "Test email"
         )
 
         for label in available_labels:
-            assert label in result
+            assert label in messages[0]["content"]
 
 
 @pytest.mark.unit
