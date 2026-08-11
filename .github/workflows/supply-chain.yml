@@ -35,13 +35,7 @@ jobs:
         run: uv python install 3.14
 
       - name: Export locked dependencies to requirements.txt
-        run: |
-          uv export --frozen --no-hashes --no-emit-project --output-file requirements-lock.txt
-          # torch is pinned to +cpu wheels from the PyTorch index, which do
-          # not exist on PyPI, so pip-audit's resolver would fail on them.
-          # Strip the local-version suffix: the upstream version is identical
-          # source-wise and is what the advisory databases key on.
-          sed -i 's/+cpu//g' requirements-lock.txt
+        run: uv export --frozen --no-hashes --no-emit-project --output-file requirements-lock.txt
 
       - name: Socket Security scan
         if: ${{ env.SOCKET_SECURITY_API_KEY != '' }}

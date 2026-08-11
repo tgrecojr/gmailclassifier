@@ -90,16 +90,6 @@ If you need to generate the token directly on the server:
    docker build -t gmail-classifier .
    ```
 
-   > **Note on image size**: The image includes CPU-only PyTorch and the
-   > prompt-injection detection model (`protectai/deberta-v3-base-prompt-injection-v2`,
-   > pre-downloaded at build time so the container runs fully offline against
-   > HuggingFace). Expect the image to grow by roughly 1 GB compared to
-   > previous versions. To build without the ML detector, set
-   > `INJECTION_ML_ENABLED=false` at runtime — the model still ships in the
-   > image but is never loaded. To use a different detection model, pass
-   > `--build-arg INJECTION_ML_MODEL=<model-id>` and set the matching
-   > `INJECTION_ML_MODEL` env var at runtime.
-
 4. **Run the container**:
    ```bash
    docker run -d \
