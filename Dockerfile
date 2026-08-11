@@ -19,15 +19,6 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
 
-# Pre-download the prompt-injection detection model so the container
-# never needs network access to HuggingFace at runtime
-ARG INJECTION_ML_MODEL=protectai/deberta-v3-base-prompt-injection-v2
-ENV HF_HOME=/app/models
-RUN /app/.venv/bin/python -c "\
-from transformers import AutoTokenizer, AutoModelForSequenceClassification; \
-AutoTokenizer.from_pretrained('${INJECTION_ML_MODEL}'); \
-AutoModelForSequenceClassification.from_pretrained('${INJECTION_ML_MODEL}')"
-
 RUN mkdir -p /app/data && chown -R nonroot:nonroot /app
 
 FROM cgr.dev/chainguard/python:latest@sha256:69437de912cc3b5d36a2480b8fb0c3f658f151d8bc1978d19a6412be3a4983d5
@@ -36,12 +27,9 @@ WORKDIR /app
 
 COPY --from=builder --chown=nonroot:nonroot /app/.venv /app/.venv
 COPY --from=builder --chown=nonroot:nonroot /app/data /app/data
-COPY --from=builder --chown=nonroot:nonroot /app/models /app/models
 COPY --chown=nonroot:nonroot *.py ./
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    HF_HOME=/app/models \
-    HF_HUB_OFFLINE=1 \
     GMAIL_CREDENTIALS_PATH=/app/credentials.json \
     GMAIL_TOKEN_PATH=/app/token.json \
     GMAIL_HEADLESS_MODE=true \

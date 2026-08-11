@@ -1,12 +1,12 @@
+import json
 import time
 import logging
-from datetime import datetime, timezone
-from typing import Dict, List
+import os
+from datetime import datetime, timedelta, timezone
+from typing import Dict
 from gmail_client import GmailClient
-from injection_guard import InjectionGuard
 from openrouter_classifier import OpenRouterClassifier
 import config
-import state_store
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +34,6 @@ class EmailClassifierAgent:
 
         # Create Gmail labels if they don't exist
         self.label_id_map = self._initialize_labels()
-
-        # Prompt-injection guard: scans emails locally before any LLM call
-        self.injection_guard = None
-        self.quarantine_label_id = None
-        if config.INJECTION_GUARD_ENABLED:
-            self.injection_guard = InjectionGuard(
-                ml_enabled=config.INJECTION_ML_ENABLED,
-                ml_model=config.INJECTION_ML_MODEL,
-                ml_threshold=config.INJECTION_ML_THRESHOLD,
-            )
-            self.quarantine_label_id = self.gmail_client.create_label_if_not_exists(
-                config.INJECTION_QUARANTINE_LABEL
-            )
 
         # Load processed email state
         self.state_file = config.STATE_FILE
@@ -78,16 +65,99 @@ class EmailClassifierAgent:
         return label_map
 
     def _load_state(self) -> Dict[str, str]:
-        """Load processed email IDs with timestamps from state file."""
-        return state_store.load_state(self.state_file, self.retention_days)
+        """
+        Load processed email IDs with timestamps from state file.
+
+        Returns:
+            Dictionary mapping email IDs to ISO format timestamps
+        """
+        if not os.path.exists(self.state_file):
+            logger.info(f"No state file found at {self.state_file}, starting fresh")
+            return {}
+
+        try:
+            with open(self.state_file, "r") as f:
+                state_data = json.load(f)
+                processed_emails_raw = state_data.get("processed_emails", {})
+
+                # Handle migration from old format (list) to new format (dict)
+                if isinstance(processed_emails_raw, list):
+                    logger.info(
+                        "Migrating state from old format (list) to new format (dict)"
+                    )
+                    # Convert list to dict with current timestamp for all entries
+                    current_time = datetime.now(timezone.utc).isoformat()
+                    processed_emails = {
+                        email_id: current_time for email_id in processed_emails_raw
+                    }
+                else:
+                    processed_emails = processed_emails_raw
+
+                # Cleanup old entries
+                processed_emails = self._cleanup_old_state(processed_emails)
+
+                logger.info(
+                    f"Loaded {len(processed_emails)} processed email IDs from {self.state_file}"
+                )
+                return processed_emails
+        except Exception as e:
+            logger.error(f"Error loading state file {self.state_file}: {e}")
+            return {}
 
     def _cleanup_old_state(self, processed_emails: Dict[str, str]) -> Dict[str, str]:
-        """Remove entries older than retention period."""
-        return state_store.cleanup_old_state(processed_emails, self.retention_days)
+        """
+        Remove entries older than retention period.
+
+        Args:
+            processed_emails: Dictionary of email_id -> timestamp
+
+        Returns:
+            Cleaned dictionary with only recent entries
+        """
+        if self.retention_days <= 0:
+            # Retention disabled (keep all)
+            return processed_emails
+
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.retention_days)
+        original_count = len(processed_emails)
+
+        cleaned = {}
+        for email_id, timestamp_str in processed_emails.items():
+            try:
+                timestamp = datetime.fromisoformat(timestamp_str)
+                if timestamp >= cutoff_date:
+                    cleaned[email_id] = timestamp_str
+            except (ValueError, TypeError) as e:
+                # Invalid timestamp, skip this entry
+                logger.warning(
+                    f"Skipping entry with invalid timestamp: {email_id} - {e}"
+                )
+                continue
+
+        removed_count = original_count - len(cleaned)
+        if removed_count > 0:
+            logger.info(
+                f"Removed {removed_count} email(s) older than {self.retention_days} days from state"
+            )
+
+        return cleaned
 
     def _save_state(self):
-        """Save processed email IDs with timestamps to state file."""
-        state_store.save_state(self.state_file, self.processed_emails)
+        """
+        Save processed email IDs with timestamps to state file.
+        """
+        try:
+            # Ensure directory exists
+            state_dir = os.path.dirname(self.state_file)
+            if state_dir and not os.path.exists(state_dir):
+                os.makedirs(state_dir, exist_ok=True)
+
+            state_data = {"processed_emails": self.processed_emails}
+            with open(self.state_file, "w") as f:
+                json.dump(state_data, f, indent=2)
+            logger.debug(f"State saved to {self.state_file}")
+        except Exception as e:
+            logger.error(f"Error saving state file {self.state_file}: {e}")
 
     def process_email(self, email: Dict) -> bool:
         """
@@ -113,14 +183,6 @@ class EmailClassifierAgent:
                 return True  # Return True since it was successfully handled before
 
             logger.info(f"Processing email: {email['subject'][:50]}...")
-
-            # Scan for prompt injection BEFORE any content reaches the LLM
-            if self.injection_guard is not None:
-                scan = self.injection_guard.scan(email)
-                if scan.flagged:
-                    return self._quarantine_email(email, scan.reasons)
-                # Use the sanitized content for classification
-                email = scan.sanitized_email
 
             # Classify the email
             predicted_labels = self.classifier.classify_email(
@@ -170,32 +232,6 @@ class EmailClassifierAgent:
         except Exception as e:
             logger.error(f"Error processing email {email.get('id', 'unknown')}: {e}")
             return False
-
-    def _quarantine_email(self, email: Dict, reasons: List[str]) -> bool:
-        """
-        Quarantine a suspicious email without sending it to the LLM.
-
-        Applies the quarantine label, leaves the email in the inbox for
-        human review, and marks it processed so it is not re-attempted.
-
-        Args:
-            email: Email dictionary from Gmail API
-            reasons: Detection reasons from the injection guard
-
-        Returns:
-            True (the email was handled)
-        """
-        logger.warning(
-            f"Prompt injection suspected in email '{email['subject'][:50]}' "
-            f"({', '.join(reasons)}); quarantining without classification"
-        )
-        if self.quarantine_label_id:
-            self.gmail_client.add_labels_to_message(
-                email["id"], [self.quarantine_label_id], remove_from_inbox=False
-            )
-        self.processed_emails[email["id"]] = datetime.now(timezone.utc).isoformat()
-        self._save_state()
-        return True
 
     def run_continuous(self):
         """

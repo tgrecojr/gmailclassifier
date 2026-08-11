@@ -7,7 +7,6 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from html_text import html_to_text
 import logging
 
 logger = logging.getLogger(__name__)
@@ -167,9 +166,8 @@ class GmailClient:
             return None
 
     def _get_message_body(self, payload: Dict) -> str:
-        """Extract message body from payload, converting HTML to plain text."""
+        """Extract message body from payload."""
         body = ""
-        is_html = False
 
         if "parts" in payload:
             for part in payload["parts"]:
@@ -178,22 +176,14 @@ class GmailClient:
                         body = base64.urlsafe_b64decode(part["body"]["data"]).decode(
                             "utf-8"
                         )
-                        is_html = False
                         break
                 elif part["mimeType"] == "text/html" and not body:
                     if "data" in part["body"]:
                         body = base64.urlsafe_b64decode(part["body"]["data"]).decode(
                             "utf-8"
                         )
-                        is_html = True
         elif "body" in payload and "data" in payload["body"]:
             body = base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8")
-            is_html = payload.get("mimeType") == "text/html"
-
-        if is_html and body:
-            # Strip markup and hidden elements so concealed instructions
-            # never reach the classification prompt
-            body = html_to_text(body)
 
         return body
 

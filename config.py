@@ -145,15 +145,6 @@ GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 GMAIL_HEADLESS_MODE = os.getenv("GMAIL_HEADLESS_MODE", "false").lower() == "true"
 REMOVE_FROM_INBOX = os.getenv("REMOVE_FROM_INBOX", "true").lower() == "true"
 
-# Prompt Injection Guard Configuration
-INJECTION_GUARD_ENABLED = os.getenv("INJECTION_GUARD_ENABLED", "true").lower() == "true"
-INJECTION_QUARANTINE_LABEL = os.getenv("INJECTION_QUARANTINE_LABEL", "Suspicious")
-INJECTION_ML_ENABLED = os.getenv("INJECTION_ML_ENABLED", "true").lower() == "true"
-INJECTION_ML_MODEL = os.getenv(
-    "INJECTION_ML_MODEL", "protectai/deberta-v3-base-prompt-injection-v2"
-)
-INJECTION_ML_THRESHOLD = float(os.getenv("INJECTION_ML_THRESHOLD", "0.98"))
-
 # Application Configuration
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "60"))
 MAX_EMAILS_PER_POLL = int(os.getenv("MAX_EMAILS_PER_POLL", "10"))
