@@ -6,7 +6,7 @@ import json
 import os
 import tempfile
 import pytest
-from datetime import timezone
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 from email_classifier_agent import EmailClassifierAgent
 
@@ -41,6 +41,8 @@ def mock_config_with_state(temp_state_file):
         mock_config.LABELS = ["AWS", "Github", "Shipping"]
         mock_config.CLASSIFICATION_PROMPT = "Test classification prompt for unit tests"
         mock_config.REMOVE_FROM_INBOX = True
+        mock_config.REJECTED_MAX_ATTEMPTS = 3
+        mock_config.REJECTED_RETRY_BASE_MINUTES = 30
         yield mock_config
 
 
@@ -390,8 +392,6 @@ class TestEmailClassifierAgentStateTracking:
         for email_id in ["email1", "email2", "email3"]:
             assert isinstance(agent.processed_emails[email_id], str)
             # Verify it's a valid ISO format timestamp
-            from datetime import datetime
-
             datetime.fromisoformat(agent.processed_emails[email_id])
 
     def test_state_retention_disabled(
@@ -478,3 +478,186 @@ class TestEmailClassifierAgentStateTracking:
         # Timestamp should be recent (within last minute)
         time_diff = datetime.now(timezone.utc) - timestamp
         assert time_diff.total_seconds() < 60
+
+
+@pytest.mark.unit
+class TestRejectedEmailRetry:
+    """A 400 from the endpoint (guardrail block) parks the email for a bounded,
+    backed-off retry instead of marking it processed."""
+
+    EMAIL = {
+        "id": "blocked_1",
+        "subject": "Tomorrow: Managing Myeloma Relapse",
+        "from": "education@example.org",
+        "body": "REGISTER NOW",
+    }
+
+    @staticmethod
+    def _reject(mock_llm_provider, message="prompt injection detected (risk=0.855)"):
+        from openrouter_classifier import ClassificationRejected
+
+        mock_llm_provider.classify_email.side_effect = ClassificationRejected(message)
+
+    def test_rejection_parks_email_instead_of_marking_processed(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        agent = EmailClassifierAgent()
+        self._reject(mock_llm_provider)
+
+        result = agent.process_email(self.EMAIL)
+
+        assert result is False
+        assert "blocked_1" not in agent.processed_emails
+        assert agent.retries.attempts("blocked_1") == 1
+        assert "prompt injection" in agent.retries.entries["blocked_1"]["reason"]
+        mock_gmail_client.add_labels_to_message.assert_not_called()
+
+    def test_rejection_is_persisted_to_state_file(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        agent = EmailClassifierAgent()
+        self._reject(mock_llm_provider)
+        agent.process_email(self.EMAIL)
+
+        with open(mock_config_with_state.STATE_FILE) as f:
+            state = json.load(f)
+
+        assert "blocked_1" not in state["processed_emails"]
+        assert state["pending_retries"]["blocked_1"]["attempts"] == 1
+
+        # Survives a restart
+        agent2 = EmailClassifierAgent()
+        assert agent2.retries.attempts("blocked_1") == 1
+
+    def test_deferred_email_is_not_resent_before_its_time(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        agent = EmailClassifierAgent()
+        self._reject(mock_llm_provider)
+        agent.process_email(self.EMAIL)
+
+        # Next poll, 60s later: still inside the 30-minute backoff
+        result = agent.process_email(self.EMAIL)
+
+        assert result is False
+        assert mock_llm_provider.classify_email.call_count == 1
+        assert agent.retries.attempts("blocked_1") == 1
+
+    def test_due_email_is_retried_and_succeeds(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        agent = EmailClassifierAgent()
+        self._reject(mock_llm_provider)
+        agent.process_email(self.EMAIL)
+
+        # Guard was tuned in the meantime; make the retry due now
+        agent.retries.entries["blocked_1"]["next_attempt"] = datetime.now(
+            timezone.utc
+        ).isoformat()
+        mock_llm_provider.classify_email.side_effect = None
+        mock_llm_provider.classify_email.return_value = ["AWS"]
+
+        result = agent.process_email(self.EMAIL)
+
+        assert result is True
+        assert "blocked_1" in agent.processed_emails
+        assert "blocked_1" not in agent.retries.entries
+        mock_gmail_client.add_labels_to_message.assert_called_once()
+        assert mock_llm_provider.classify_email.call_count == 2
+
+    def test_gives_up_after_max_attempts(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider, caplog
+    ):
+        """REJECTED_MAX_ATTEMPTS=3 in the fixture: two parked retries, then
+        the third rejection marks the email processed with no labels."""
+        import logging
+
+        caplog.set_level(logging.WARNING)
+        agent = EmailClassifierAgent()
+        self._reject(mock_llm_provider)
+
+        for expected_attempts in (1, 2):
+            agent.process_email(self.EMAIL)
+            assert agent.retries.attempts("blocked_1") == expected_attempts
+            assert "blocked_1" not in agent.processed_emails
+            agent.retries.entries["blocked_1"]["next_attempt"] = datetime.now(
+                timezone.utc
+            ).isoformat()
+
+        result = agent.process_email(self.EMAIL)
+
+        assert result is False
+        assert "blocked_1" in agent.processed_emails
+        assert "blocked_1" not in agent.retries.entries
+        assert mock_llm_provider.classify_email.call_count == 3
+        assert "Giving up on rejected email after 3 attempt(s)" in caplog.text
+
+        # Fourth poll: skipped as processed, no further endpoint calls
+        assert agent.process_email(self.EMAIL) is True
+        assert mock_llm_provider.classify_email.call_count == 3
+
+    def test_give_up_is_persisted(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        mock_config_with_state.REJECTED_MAX_ATTEMPTS = 1
+        agent = EmailClassifierAgent()
+        self._reject(mock_llm_provider)
+
+        agent.process_email(self.EMAIL)
+
+        with open(mock_config_with_state.STATE_FILE) as f:
+            state = json.load(f)
+        assert "blocked_1" in state["processed_emails"]
+        assert state["pending_retries"] == {}
+
+    def test_other_exceptions_keep_existing_behaviour(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        """Non-400 failures are not parked: no retry entry, not processed."""
+        agent = EmailClassifierAgent()
+        mock_llm_provider.classify_email.side_effect = RuntimeError("network")
+
+        result = agent.process_email(self.EMAIL)
+
+        assert result is False
+        assert "blocked_1" not in agent.processed_emails
+        assert agent.retries.entries == {}
+
+    def test_stale_pending_entries_are_pruned_on_load(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        from datetime import timedelta
+
+        old = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+        with open(mock_config_with_state.STATE_FILE, "w") as f:
+            json.dump(
+                {
+                    "processed_emails": {},
+                    "pending_retries": {
+                        "ancient": {
+                            "attempts": 1,
+                            "last_attempt": old,
+                            "next_attempt": old,
+                            "reason": "r",
+                        }
+                    },
+                },
+                f,
+            )
+
+        agent = EmailClassifierAgent()
+
+        assert agent.retries.entries == {}
+
+    def test_legacy_state_file_without_pending_retries_loads(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        with open(mock_config_with_state.STATE_FILE, "w") as f:
+            json.dump(
+                {"processed_emails": {"e1": datetime.now(timezone.utc).isoformat()}}, f
+            )
+
+        agent = EmailClassifierAgent()
+
+        assert "e1" in agent.processed_emails
+        assert agent.retries.entries == {}

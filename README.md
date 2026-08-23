@@ -312,6 +312,16 @@ To prevent the state file from growing indefinitely, the agent automatically rem
 
 **Migration**: The state file automatically migrates from the old format (list of IDs) to the new format (dictionary with timestamps) on first load.
 
+### Retrying Rejected Emails
+
+When the LLM endpoint answers **HTTP 400** — typically a gateway guardrail (e.g. LiteLLM + llmprotect) blocking the email as a suspected prompt injection — the email is **not** marked processed. It is parked under `pending_retries` in the state file and offered to the endpoint again on a doubling schedule, so a guardrail tuned after the fact still picks the email up. The attempt cap prevents a persistently-blocked email from being scanned forever.
+
+- `REJECTED_MAX_ATTEMPTS` (default `5`): total attempts including the first. Set to `1` to disable retries (400 → processed immediately, no labels).
+- `REJECTED_RETRY_BASE_MINUTES` (default `30`): wait after the first rejection; doubles after each further one. Defaults give 30 m → 1 h → 2 h → 4 h, i.e. the last attempt about 7.5 hours after the first.
+- On the final failed attempt the email is marked processed with no labels and a `Giving up on rejected email` warning is logged.
+- A successful classification clears the retry entry. Pending entries older than `STATE_RETENTION_DAYS` are pruned like processed entries.
+- Only 400s are retried this way. Other classifier failures (network, 5xx, unparseable response) are unchanged: they are logged, yield no labels, and the email is marked processed.
+
 To clear the state and reprocess all emails:
 ```bash
 # Local

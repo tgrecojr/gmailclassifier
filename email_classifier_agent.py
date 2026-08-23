@@ -1,11 +1,11 @@
-import json
 import time
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict
 from gmail_client import GmailClient
-from openrouter_classifier import OpenRouterClassifier
+from openrouter_classifier import ClassificationRejected, OpenRouterClassifier
+from retry_tracker import RetryTracker
+import state_store
 import config
 
 logger = logging.getLogger(__name__)
@@ -36,9 +36,13 @@ class EmailClassifierAgent:
         # Create Gmail labels if they don't exist
         self.label_id_map = self._initialize_labels()
 
-        # Load processed email state
+        # Load processed email state (+ emails parked for retry after a 400)
         self.state_file = config.STATE_FILE
         self.retention_days = config.STATE_RETENTION_DAYS
+        self.retries = RetryTracker(
+            max_attempts=config.REJECTED_MAX_ATTEMPTS,
+            base_delay=timedelta(minutes=config.REJECTED_RETRY_BASE_MINUTES),
+        )
         self.processed_emails: Dict[str, str] = self._load_state()
 
         logger.info(
@@ -46,8 +50,10 @@ class EmailClassifierAgent:
             f"{config.LLM_BASE_URL} (model: {config.OPENROUTER_MODEL})"
         )
         logger.info(
-            f"Loaded {len(self.processed_emails)} processed emails from state "
-            f"(retention: {self.retention_days} days)"
+            f"Loaded {len(self.processed_emails)} processed emails and "
+            f"{len(self.retries.entries)} pending retries from state "
+            f"(retention: {self.retention_days} days; rejected emails retried up to "
+            f"{self.retries.max_attempts}x from {config.REJECTED_RETRY_BASE_MINUTES}m)"
         )
 
     def _initialize_labels(self) -> Dict[str, str]:
@@ -68,98 +74,39 @@ class EmailClassifierAgent:
 
     def _load_state(self) -> Dict[str, str]:
         """
-        Load processed email IDs with timestamps from state file.
+        Load processed email IDs (and pending retries) from the state file,
+        applying retention cleanup.
 
         Returns:
             Dictionary mapping email IDs to ISO format timestamps
         """
-        if not os.path.exists(self.state_file):
-            logger.info(f"No state file found at {self.state_file}, starting fresh")
-            return {}
-
-        try:
-            with open(self.state_file, "r") as f:
-                state_data = json.load(f)
-                processed_emails_raw = state_data.get("processed_emails", {})
-
-                # Handle migration from old format (list) to new format (dict)
-                if isinstance(processed_emails_raw, list):
-                    logger.info(
-                        "Migrating state from old format (list) to new format (dict)"
-                    )
-                    # Convert list to dict with current timestamp for all entries
-                    current_time = datetime.now(timezone.utc).isoformat()
-                    processed_emails = {
-                        email_id: current_time for email_id in processed_emails_raw
-                    }
-                else:
-                    processed_emails = processed_emails_raw
-
-                # Cleanup old entries
-                processed_emails = self._cleanup_old_state(processed_emails)
-
-                logger.info(
-                    f"Loaded {len(processed_emails)} processed email IDs from {self.state_file}"
-                )
-                return processed_emails
-        except Exception as e:
-            logger.error(f"Error loading state file {self.state_file}: {e}")
-            return {}
+        processed_emails, pending = state_store.load_state(self.state_file)
+        self.retries.entries = pending
+        processed_emails = self._cleanup_old_state(processed_emails)
+        logger.info(
+            f"Loaded {len(processed_emails)} processed email IDs from {self.state_file}"
+        )
+        return processed_emails
 
     def _cleanup_old_state(self, processed_emails: Dict[str, str]) -> Dict[str, str]:
         """
-        Remove entries older than retention period.
-
-        Args:
-            processed_emails: Dictionary of email_id -> timestamp
-
-        Returns:
-            Cleaned dictionary with only recent entries
+        Remove processed entries (and pending retries) older than the
+        retention period. Retention <= 0 keeps everything.
         """
         if self.retention_days <= 0:
-            # Retention disabled (keep all)
             return processed_emails
 
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.retention_days)
-        original_count = len(processed_emails)
-
-        cleaned = {}
-        for email_id, timestamp_str in processed_emails.items():
-            try:
-                timestamp = datetime.fromisoformat(timestamp_str)
-                if timestamp >= cutoff_date:
-                    cleaned[email_id] = timestamp_str
-            except (ValueError, TypeError) as e:
-                # Invalid timestamp, skip this entry
-                logger.warning(
-                    f"Skipping entry with invalid timestamp: {email_id} - {e}"
-                )
-                continue
-
-        removed_count = original_count - len(cleaned)
-        if removed_count > 0:
-            logger.info(
-                f"Removed {removed_count} email(s) older than {self.retention_days} days from state"
-            )
-
-        return cleaned
+        cutoff = state_store.retention_cutoff(self.retention_days)
+        self.retries.prune(cutoff)
+        return state_store.cleanup_old_entries(
+            processed_emails, cutoff, self.retention_days
+        )
 
     def _save_state(self):
-        """
-        Save processed email IDs with timestamps to state file.
-        """
-        try:
-            # Ensure directory exists
-            state_dir = os.path.dirname(self.state_file)
-            if state_dir and not os.path.exists(state_dir):
-                os.makedirs(state_dir, exist_ok=True)
-
-            state_data = {"processed_emails": self.processed_emails}
-            with open(self.state_file, "w") as f:
-                json.dump(state_data, f, indent=2)
-            logger.debug(f"State saved to {self.state_file}")
-        except Exception as e:
-            logger.error(f"Error saving state file {self.state_file}: {e}")
+        """Persist processed email IDs and pending retries."""
+        state_store.save_state(
+            self.state_file, self.processed_emails, self.retries.to_dict()
+        )
 
     def process_email(self, email: Dict) -> bool:
         """
@@ -184,14 +131,28 @@ class EmailClassifierAgent:
                 )
                 return True  # Return True since it was successfully handled before
 
+            # Rejected earlier and not yet due for another try
+            if self.retries.is_deferred(email_id, datetime.now(timezone.utc)):
+                logger.debug(
+                    f"Deferring retry of rejected email: {email['subject'][:50]}..."
+                )
+                return False
+
             logger.info(f"Processing email: {email['subject'][:50]}...")
 
             # Classify the email
-            predicted_labels = self.classifier.classify_email(
-                email=email,
-                classification_prompt=config.CLASSIFICATION_PROMPT,
-                available_labels=config.LABELS,
-            )
+            try:
+                predicted_labels = self.classifier.classify_email(
+                    email=email,
+                    classification_prompt=config.CLASSIFICATION_PROMPT,
+                    available_labels=config.LABELS,
+                )
+            except ClassificationRejected as e:
+                self._handle_rejection(email, str(e))
+                return False
+
+            # A successful round trip resolves any earlier rejection
+            self.retries.clear(email_id)
 
             if not predicted_labels:
                 logger.warning(f"No labels predicted for email: {email['subject']}")
@@ -234,6 +195,30 @@ class EmailClassifierAgent:
         except Exception as e:
             logger.error(f"Error processing email {email.get('id', 'unknown')}: {e}")
             return False
+
+    def _handle_rejection(self, email: Dict, reason: str) -> None:
+        """
+        The endpoint answered 400 (e.g. guardrail block). Park the email for a
+        backed-off retry, or give up and mark it processed once the attempt
+        cap is reached so a permanently-blocked email cannot loop forever.
+        """
+        email_id = email["id"]
+        subject = email.get("subject", "")[:50]
+        now = datetime.now(timezone.utc)
+        gave_up = self.retries.record_rejection(email_id, reason, now)
+        if gave_up:
+            logger.warning(
+                f"Giving up on rejected email after {self.retries.max_attempts} "
+                f"attempt(s), marking processed without labels: {subject}"
+            )
+            self.processed_emails[email_id] = now.isoformat()
+        else:
+            attempts = self.retries.attempts(email_id)
+            logger.warning(
+                f"Email rejected (attempt {attempts}/{self.retries.max_attempts}); "
+                f"will retry after {self.retries.delay_after(attempts)}: {subject}"
+            )
+        self._save_state()
 
     def run_continuous(self):
         """
