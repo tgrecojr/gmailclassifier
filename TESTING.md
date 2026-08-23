@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project uses pytest for testing with comprehensive unit test coverage for all LLM providers and utility functions.
+This project uses pytest for unit testing the classifier, Gmail client, configuration loading, and shared utilities. All external APIs (Gmail, the LLM endpoint) are mocked.
 
 > **Note:** All commands below assume you've set up the environment with `uv sync --frozen`. Prefix any bare `pytest`, `black`, `flake8`, or `python` command with `uv run` so it executes inside the project's `.venv`.
 
@@ -41,7 +41,7 @@ pytest tests/test_llm_utils.py -v
 ### Run specific test class
 
 ```bash
-pytest tests/test_bedrock_provider.py::TestBedrockProvider -v
+pytest tests/test_openrouter_classifier.py::TestOpenRouterClassifierInit -v
 ```
 
 ### Run specific test method
@@ -55,40 +55,27 @@ pytest tests/test_llm_utils.py::TestParseLabelsParsing::test_plain_json_object -
 ```
 tests/
 ├── __init__.py
-├── conftest.py                      # Shared fixtures and test data
-├── test_llm_utils.py                # Tests for llm_utils.py (100% coverage)
-├── test_llm_factory.py              # Tests for llm_factory.py (100% coverage)
-├── test_bedrock_provider.py         # Tests for BedrockProvider (95% coverage)
-├── test_anthropic_provider.py       # Tests for AnthropicProvider (86% coverage)
-├── test_openai_provider.py          # Tests for OpenAIProvider (72% coverage)
-└── test_ollama_provider.py          # Tests for OllamaProvider (72% coverage)
+├── conftest.py                      # Shared fixtures, creates a throwaway classifier_config.json
+├── test_config.py                   # model_config.json validation, LLM_BASE_URL resolution
+├── test_email_classifier_agent.py   # Agent wiring, state tracking and retention
+├── test_gmail_client.py             # Gmail API client (mocked googleapiclient)
+├── test_llm_utils.py                # Prompt construction and JSON label parsing
+└── test_openrouter_classifier.py    # OpenRouterClassifier (mocked openai client)
 ```
 
 ## Test Coverage
 
-Current test coverage: **81%** overall (tested modules only)
+CI enforces a **70%** minimum; the suite currently sits around 80%.
 
-Coverage focuses on LLM provider functionality:
+What is covered:
 
-- **llm_utils.py**: 70% coverage
-  - Email content construction
-  - Classification prompt construction
-  - JSON parsing edge cases
-  - Label validation and case-insensitive matching
+- **config.py**: model config validation, `LLM_BASE_URL` defaulting/override/empty handling
+- **openrouter_classifier.py**: client construction (default OpenRouter URL, custom gateway URL, empty fallback), request parameters, error handling, label filtering
+- **email_classifier_agent.py**: classifier receives config values including `LLM_BASE_URL`, state persistence and retention pruning
+- **gmail_client.py**: OAuth flow, message fetching, labelling, inbox removal
+- **llm_utils.py**: email/prompt construction, JSON parsing edge cases, case-insensitive label matching
 
-- **llm_factory.py**: 100% coverage
-  - Provider creation for all types
-  - Configuration handling
-  - Error handling for invalid providers
-
-- **Provider modules**: 72-95% coverage
-  - Successful classification
-  - API error handling
-  - JSON parsing edge cases
-  - Invalid label filtering
-  - Case-insensitive label matching
-
-**Note**: Coverage calculation excludes files without tests yet (gmail_client.py, email_classifier_agent.py, etc.). These will be added in future test iterations.
+`main.py`, `setup_token.py`, and `verify_setup.py` are entry-point scripts excluded from coverage (see `[tool.coverage.run]` in `pyproject.toml`).
 
 ## Test Categories
 
@@ -160,18 +147,22 @@ Common fixtures are defined in `tests/conftest.py`:
 - `test_email`: Sample email dictionary
 - `test_labels`: Sample label list
 - `classification_prompt`: Sample classification prompt
-- `mock_responses`: Mock API responses for all providers
 
 ### Mocking External APIs
 
-Use `patch.dict('sys.modules', ...)` to mock external library imports:
+`OpenRouterClassifier` imports `openai` lazily inside `__init__`, so patch `openai.OpenAI` and then swap in a fresh `MagicMock` client per test:
 
 ```python
-with patch.dict('sys.modules', {'anthropic': mock_anthropic}):
-    from providers.anthropic_provider import AnthropicProvider
-    provider = AnthropicProvider(api_key="test-key")
-    result = provider.classify_email(...)
+with patch("openai.OpenAI") as mock_openai:
+    mock_openai.return_value = MagicMock()
+    classifier = OpenRouterClassifier(api_key="test-key", base_url="http://litellm:4000/v1")
+
+classifier.client = MagicMock()
+classifier.client.chat.completions.create.return_value = fake_response
+result = classifier.classify_email(email, prompt, labels)
 ```
+
+Tests that depend on `config.py` module-level values use the `reload_config` fixture in `tests/test_config.py`, which reloads the module with environment overrides while keeping a developer's real `.env` out of the picture.
 
 ## Edge Cases Tested
 
@@ -192,17 +183,14 @@ with patch.dict('sys.modules', {'anthropic': mock_anthropic}):
 - Rate limiting
 - Timeout errors
 - Missing dependencies (ImportError)
-- Invalid provider types
+- Empty / whitespace `LLM_BASE_URL` falling back to OpenRouter
 
 ## Future Testing
 
-Planned test additions (see issue #5):
+Possible additions:
 
 - Integration tests with real API calls (optional, requires API keys)
-- End-to-end tests for email classification workflow
-- Performance benchmarking tests
-- Consistency tests across providers
-- Provider fallback mechanism tests
+- End-to-end tests for the email classification workflow
 
 ## Troubleshooting
 

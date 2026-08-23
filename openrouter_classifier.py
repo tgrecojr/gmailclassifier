@@ -1,11 +1,13 @@
 """
-OpenRouter LLM classifier implementation.
+OpenAI-compatible LLM classifier implementation.
 
-Uses OpenRouter API (OpenAI-compatible) to classify emails.
+Defaults to the OpenRouter API, but any OpenAI-compatible endpoint
+(e.g. a LiteLLM proxy) can be targeted by supplying a custom base URL.
 """
 
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
+from urllib.parse import urlparse
 from llm_utils import (
     construct_email_content,
     construct_classification_prompt,
@@ -15,9 +17,12 @@ from llm_utils import (
 
 logger = logging.getLogger(__name__)
 
+# Default API endpoint when no custom base URL is configured.
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
 
 class OpenRouterClassifier:
-    """OpenRouter API implementation for email classification."""
+    """OpenAI-compatible API implementation for email classification."""
 
     def __init__(
         self,
@@ -25,23 +30,29 @@ class OpenRouterClassifier:
         model: str = "anthropic/claude-3.5-sonnet",
         temperature: float = 0.0,
         max_tokens: int = 1000,
+        base_url: Optional[str] = None,
     ):
         """
-        Initialize OpenRouter classifier.
+        Initialize the classifier.
 
         Args:
-            api_key: OpenRouter API key
+            api_key: API key sent as the bearer token to the configured endpoint
             model: Model ID (default: anthropic/claude-3.5-sonnet)
                    See https://openrouter.ai/docs for available models
             temperature: Sampling temperature (0.0-2.0, default: 0.0)
             max_tokens: Maximum tokens in response (default: 1000)
+            base_url: OpenAI-compatible API base URL. Falls back to OpenRouter
+                      when None or empty.
         """
         try:
             import openai
 
+            self.base_url = base_url or OPENROUTER_BASE_URL
+            # Short label (hostname) for per-email log lines
+            self.provider_name = urlparse(self.base_url).netloc or self.base_url
             self.client = openai.OpenAI(
                 api_key=api_key,
-                base_url="https://openrouter.ai/api/v1",
+                base_url=self.base_url,
                 default_headers={
                     "HTTP-Referer": ("https://github.com/tgrecojr/gmailclassifier"),
                     "X-Title": "gmailclassifier",
@@ -51,7 +62,7 @@ class OpenRouterClassifier:
             self.temperature = temperature
             self.max_tokens = max_tokens
             logger.info(
-                f"Initialized OpenRouter classifier with model: {model}, "
+                f"Initialized LLM classifier at {self.base_url} with model: {model}, "
                 f"temperature: {temperature}, max_tokens: {max_tokens}"
             )
         except ImportError:
@@ -64,7 +75,7 @@ class OpenRouterClassifier:
         self, email: Dict, classification_prompt: str, available_labels: List[str]
     ) -> List[str]:
         """
-        Classify an email using OpenRouter API.
+        Classify an email using the configured OpenAI-compatible API.
 
         Args:
             email: Email dictionary with subject, from, body fields
@@ -81,7 +92,7 @@ class OpenRouterClassifier:
                 classification_prompt, available_labels, email_content
             )
 
-            # Call OpenRouter API (OpenAI-compatible)
+            # Call the OpenAI-compatible chat completions endpoint
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -102,7 +113,7 @@ class OpenRouterClassifier:
             labels = parse_labels_from_response(response_text, available_labels)
 
             # Log result
-            log_classification_result(email, labels, "OpenRouter")
+            log_classification_result(email, labels, self.provider_name)
 
             return labels
 
@@ -112,5 +123,7 @@ class OpenRouterClassifier:
             )
             return []
         except Exception as e:
-            logger.error(f"Error classifying email with OpenRouter: {e}", exc_info=True)
+            logger.error(
+                f"Error classifying email via {self.provider_name}: {e}", exc_info=True
+            )
             return []

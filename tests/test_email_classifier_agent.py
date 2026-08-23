@@ -33,7 +33,11 @@ def mock_config_with_state(temp_state_file):
         mock_config.GMAIL_TOKEN_PATH = "token.json"
         mock_config.GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
         mock_config.GMAIL_HEADLESS_MODE = True
-        mock_config.LLM_PROVIDER = "bedrock"
+        mock_config.OPENROUTER_API_KEY = "test-key"
+        mock_config.OPENROUTER_MODEL = "anthropic/claude-3.5-sonnet"
+        mock_config.OPENROUTER_TEMPERATURE = 0.0
+        mock_config.OPENROUTER_MAX_TOKENS = 1000
+        mock_config.LLM_BASE_URL = "http://litellm:4000/v1"
         mock_config.LABELS = ["AWS", "Github", "Shipping"]
         mock_config.CLASSIFICATION_PROMPT = "Test classification prompt for unit tests"
         mock_config.REMOVE_FROM_INBOX = True
@@ -61,6 +65,26 @@ def mock_llm_provider():
         classifier.classify_email = Mock(return_value=["AWS", "Github"])
         mock.return_value = classifier
         yield classifier
+
+
+@pytest.mark.unit
+class TestEmailClassifierAgentInit:
+    """Tests for classifier wiring at agent construction."""
+
+    def test_classifier_receives_config_values(
+        self, mock_config_with_state, mock_gmail_client
+    ):
+        """The agent forwards API key, model settings, and LLM_BASE_URL."""
+        with patch("email_classifier_agent.OpenRouterClassifier") as mock_cls:
+            EmailClassifierAgent()
+
+        mock_cls.assert_called_once_with(
+            api_key="test-key",
+            model="anthropic/claude-3.5-sonnet",
+            temperature=0.0,
+            max_tokens=1000,
+            base_url="http://litellm:4000/v1",
+        )
 
 
 @pytest.mark.unit
