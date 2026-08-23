@@ -56,6 +56,15 @@ def is_json_mode_rejection(error: Exception) -> bool:
     return bool(_JSON_MODE_REJECTION.search(str(error)))
 
 
+class ClassificationRejected(Exception):
+    """
+    The endpoint refused the request with HTTP 400 (typically a gateway
+    guardrail block). Distinct from a model answering with no labels, and
+    from transient failures: the caller may want to retry later, once the
+    guardrail has been tuned, rather than give up on the email for good.
+    """
+
+
 class OpenRouterClassifier:
     """OpenAI-compatible API implementation for email classification."""
 
@@ -155,6 +164,10 @@ class OpenRouterClassifier:
 
         Returns:
             List of applicable label names
+
+        Raises:
+            ClassificationRejected: the endpoint answered HTTP 400 (e.g. a
+                guardrail block). Other failures are logged and yield [].
         """
         try:
             # Construct email content and full prompt using shared utilities
@@ -179,6 +192,10 @@ class OpenRouterClassifier:
 
             return labels
 
+        except openai.BadRequestError as e:
+            # No traceback: the message (guard reason) is the useful part.
+            logger.error(f"{self.provider_name} rejected the request: {e}")
+            raise ClassificationRejected(str(e)) from e
         except Exception as e:
             logger.error(
                 f"Error classifying email via {self.provider_name}: {e}", exc_info=True

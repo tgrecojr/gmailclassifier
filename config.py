@@ -158,3 +158,10 @@ MAX_EMAILS_PER_POLL = int(os.getenv("MAX_EMAILS_PER_POLL", "10"))
 STATE_FILE = os.getenv("STATE_FILE", ".email_state.json")
 STATE_RETENTION_DAYS = int(os.getenv("STATE_RETENTION_DAYS", "30"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# Retry policy for emails the LLM endpoint rejects with HTTP 400 (e.g. a
+# gateway guardrail block). Total attempts including the first; the wait
+# doubles after each failure starting from the base (30m, 1h, 2h, 4h ...).
+# REJECTED_MAX_ATTEMPTS=1 disables retries.
+REJECTED_MAX_ATTEMPTS = int(os.getenv("REJECTED_MAX_ATTEMPTS", "5"))
+REJECTED_RETRY_BASE_MINUTES = int(os.getenv("REJECTED_RETRY_BASE_MINUTES", "30"))

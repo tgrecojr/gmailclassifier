@@ -13,6 +13,7 @@ from openrouter_classifier import (
     JSON_RESPONSE_FORMAT,
     OPENROUTER_BASE_URL,
     SYSTEM_PROMPT,
+    ClassificationRejected,
     OpenRouterClassifier,
     is_json_mode_rejection,
 )
@@ -314,7 +315,9 @@ class TestOpenRouterClassifyEmail:
         A gateway guardrail (LiteLLM + llmprotect) answers 400 for prompt-
         injection blocks. That must not trigger the no-JSON retry (which costs
         a second guard scan) and must not disable JSON mode for later emails.
-        Regression for the 2026-08-23 myeloma.org incident.
+        The block surfaces as ClassificationRejected so the agent can park the
+        email for a later retry. Regression for the 2026-08-23 myeloma.org
+        incident.
         """
         import logging
 
@@ -324,11 +327,13 @@ class TestOpenRouterClassifyEmail:
             GUARD_BLOCK_MESSAGE
         )
 
-        result = classifier.classify_email(
-            sample_email, classification_prompt, available_labels
-        )
+        with pytest.raises(ClassificationRejected) as excinfo:
+            classifier.classify_email(
+                sample_email, classification_prompt, available_labels
+            )
 
-        assert result == []
+        assert "prompt injection detected" in str(excinfo.value)
+        assert isinstance(excinfo.value.__cause__, openai.BadRequestError)
         assert classifier.json_mode is True
         assert classifier.client.chat.completions.create.call_count == 1
         assert "rejected JSON response_format" not in caplog.text
