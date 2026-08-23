@@ -8,6 +8,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import logging
+from llm_utils import normalize_urls
 
 logger = logging.getLogger(__name__)
 
@@ -149,8 +150,9 @@ class GmailClient:
                 (h["value"] for h in headers if h["name"].lower() == "date"), "Unknown"
             )
 
-            # Get message body
-            body = self._get_message_body(message["payload"])
+            # Get message body. Strip tracking-link paths *before* truncating so
+            # they don't eat the body budget in link-heavy marketing emails.
+            body = normalize_urls(self._get_message_body(message["payload"]))
 
             return {
                 "id": msg_id,
