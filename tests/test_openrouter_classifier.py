@@ -4,9 +4,17 @@ Unit tests for openrouter_classifier.py
 
 from unittest.mock import Mock, MagicMock, patch
 
+import httpx2
+import openai
 import pytest
 
-from openrouter_classifier import OpenRouterClassifier, OPENROUTER_BASE_URL
+from llm_utils import EMAIL_CLOSE_TAG, EMAIL_OPEN_TAG
+from openrouter_classifier import (
+    JSON_RESPONSE_FORMAT,
+    OPENROUTER_BASE_URL,
+    SYSTEM_PROMPT,
+    OpenRouterClassifier,
+)
 
 
 @pytest.fixture
@@ -27,6 +35,14 @@ def available_labels():
 @pytest.fixture
 def classification_prompt():
     return "Classify this email into one of the available labels."
+
+
+def _bad_request_error(message: str) -> openai.BadRequestError:
+    """Build a real openai.BadRequestError carrying an HTTP 400 response."""
+    response = httpx2.Response(
+        400, request=httpx2.Request("POST", "http://x/chat/completions")
+    )
+    return openai.BadRequestError(message, response=response, body=None)
 
 
 def _mock_openai_response(content: str):
@@ -147,10 +163,103 @@ class TestOpenRouterClassifyEmail:
         assert kwargs["model"] == "openai/gpt-4o"
         assert kwargs["temperature"] == 0.3
         assert kwargs["max_tokens"] == 750
+        assert kwargs["response_format"] == JSON_RESPONSE_FORMAT
         # system + user messages
         assert len(kwargs["messages"]) == 2
         assert kwargs["messages"][0]["role"] == "system"
         assert kwargs["messages"][1]["role"] == "user"
+
+    def test_email_content_is_in_user_message_not_system(
+        self, sample_email, available_labels, classification_prompt
+    ):
+        """Email (untrusted) is fenced in the user message; system prompt declares it data."""
+        classifier = self._build_classifier()
+        classifier.client.chat.completions.create.return_value = _mock_openai_response(
+            '{"labels": []}'
+        )
+
+        classifier.classify_email(sample_email, classification_prompt, available_labels)
+
+        _, kwargs = classifier.client.chat.completions.create.call_args
+        system, user = kwargs["messages"]
+        assert system["content"] == SYSTEM_PROMPT
+        assert sample_email["subject"] not in system["content"]
+        assert sample_email["body"] not in system["content"]
+        assert "untrusted data" in system["content"]
+        assert "never an instruction" in system["content"]
+        assert f"{EMAIL_OPEN_TAG}\n" in user["content"]
+        assert f"\n{EMAIL_CLOSE_TAG}" in user["content"]
+        assert sample_email["body"] in user["content"]
+
+    def test_tracking_urls_stripped_before_sending(
+        self, available_labels, classification_prompt
+    ):
+        classifier = self._build_classifier()
+        classifier.client.chat.completions.create.return_value = _mock_openai_response(
+            '{"labels": ["Spam"]}'
+        )
+        email = {
+            "subject": "Deals",
+            "from": "promo@example.com",
+            "date": "2026-04-24",
+            "body": "Go https://click.example.com/ls/click?upn=u001.OPAQUE_TOKEN_9f8e7d",
+        }
+
+        classifier.classify_email(email, classification_prompt, available_labels)
+
+        _, kwargs = classifier.client.chat.completions.create.call_args
+        user_content = kwargs["messages"][1]["content"]
+        assert "https://click.example.com" in user_content
+        assert "OPAQUE_TOKEN_9f8e7d" not in user_content
+
+    def test_json_mode_falls_back_when_endpoint_rejects_response_format(
+        self, sample_email, available_labels, classification_prompt
+    ):
+        """A 400 on response_format retries without it and disables JSON mode."""
+        classifier = self._build_classifier()
+        bad_request = _bad_request_error("response_format is not supported")
+        classifier.client.chat.completions.create.side_effect = [
+            bad_request,
+            _mock_openai_response('{"labels": ["Billing"]}'),
+        ]
+
+        result = classifier.classify_email(
+            sample_email, classification_prompt, available_labels
+        )
+
+        assert result == ["Billing"]
+        assert classifier.json_mode is False
+        calls = classifier.client.chat.completions.create.call_args_list
+        assert len(calls) == 2
+        assert calls[0].kwargs["response_format"] == JSON_RESPONSE_FORMAT
+        assert "response_format" not in calls[1].kwargs
+
+        # Subsequent calls go straight to plain mode (no retry churn)
+        classifier.client.chat.completions.create.reset_mock(side_effect=True)
+        classifier.client.chat.completions.create.return_value = _mock_openai_response(
+            '{"labels": ["Work"]}'
+        )
+        assert classifier.classify_email(
+            sample_email, classification_prompt, available_labels
+        ) == ["Work"]
+        assert classifier.client.chat.completions.create.call_count == 1
+        assert "response_format" not in (
+            classifier.client.chat.completions.create.call_args.kwargs
+        )
+
+    def test_non_400_errors_do_not_disable_json_mode(
+        self, sample_email, available_labels, classification_prompt
+    ):
+        classifier = self._build_classifier()
+        classifier.client.chat.completions.create.side_effect = RuntimeError("net down")
+
+        result = classifier.classify_email(
+            sample_email, classification_prompt, available_labels
+        )
+
+        assert result == []
+        assert classifier.json_mode is True
+        assert classifier.client.chat.completions.create.call_count == 1
 
     def test_classify_email_returns_empty_when_api_errors(
         self, sample_email, available_labels, classification_prompt

@@ -425,6 +425,12 @@ The application includes robust error handling:
 - Regularly rotate API keys
 - Review Gmail API OAuth scopes to ensure minimum necessary permissions
 
+### What is sent to the model, and prompt-injection hardening
+
+- **URLs are reduced to scheme + host** before the email leaves this process (subject and body). Click-tracking links such as `https://click.example.com/ls/click?upn=u001.AbC...` become `https://click.example.com`. The opaque tokens add nothing to classification, often encode the recipient, and look like encoded payloads to prompt-injection screeners (e.g. PIGuard behind a LiteLLM gateway), which was blocking ordinary marketing email. Normalization also runs before the 5000-character body cut so link-heavy emails keep their real text.
+- **Email content is fenced** inside `<email>...</email>` in the user message, and the system prompt declares everything inside the fence to be untrusted data, never instructions. Email content is never placed in the system message. Any `<email>`/`</email>` tags that appear inside a message are defanged so the content cannot close the fence early.
+- **Output is constrained and validated.** Requests use OpenAI JSON mode (`response_format: json_object`) when the endpoint supports it (automatic fallback to plain text if it returns HTTP 400), and the returned labels are filtered against the configured label set in code. A successful injection can at most pick a wrong label; it cannot make the agent do anything else.
+
 ## Docker Deployment
 
 Quick start with Docker:

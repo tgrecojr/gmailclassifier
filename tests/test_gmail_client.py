@@ -204,6 +204,19 @@ class TestGetMessageDetails:
         }
         assert len(client._get_message_details("m1")["body"]) == 5000
 
+    def test_tracking_urls_normalized_before_truncation(self, client):
+        """Link-heavy bodies keep their real text: URLs shrink before the 5000 cut."""
+        tracking = "https://click.example.com/ls/click?upn=" + "A" * 5500
+        body_text = f"Visit {tracking} for the footer text"
+        client.service.users.return_value.messages.return_value.get.return_value.execute.return_value = {
+            "payload": {"headers": [], "body": {"data": _b64(body_text)}},
+            "snippet": "",
+        }
+
+        body = client._get_message_details("m1")["body"]
+
+        assert body == "Visit https://click.example.com for the footer text"
+
     def test_http_error_returns_none(self, client):
         client.service.users.return_value.messages.return_value.get.return_value.execute.side_effect = (
             _make_http_error()
