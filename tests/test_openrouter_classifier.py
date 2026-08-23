@@ -4,6 +4,7 @@ Unit tests for openrouter_classifier.py
 
 from unittest.mock import Mock, MagicMock, patch
 
+import httpx2
 import openai
 import pytest
 
@@ -34,6 +35,14 @@ def available_labels():
 @pytest.fixture
 def classification_prompt():
     return "Classify this email into one of the available labels."
+
+
+def _bad_request_error(message: str) -> openai.BadRequestError:
+    """Build a real openai.BadRequestError carrying an HTTP 400 response."""
+    response = httpx2.Response(
+        400, request=httpx2.Request("POST", "http://x/chat/completions")
+    )
+    return openai.BadRequestError(message, response=response, body=None)
 
 
 def _mock_openai_response(content: str):
@@ -207,16 +216,8 @@ class TestOpenRouterClassifyEmail:
         self, sample_email, available_labels, classification_prompt
     ):
         """A 400 on response_format retries without it and disables JSON mode."""
-        import httpx
-
         classifier = self._build_classifier()
-        bad_request = openai.BadRequestError(
-            "response_format is not supported",
-            response=httpx.Response(
-                400, request=httpx.Request("POST", "http://x/chat/completions")
-            ),
-            body=None,
-        )
+        bad_request = _bad_request_error("response_format is not supported")
         classifier.client.chat.completions.create.side_effect = [
             bad_request,
             _mock_openai_response('{"labels": ["Billing"]}'),
