@@ -2,6 +2,7 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
+from openrouter_classifier import OPENROUTER_BASE_URL
 
 load_dotenv()
 
@@ -113,8 +114,14 @@ except (FileNotFoundError, ValueError) as e:
     print("Please ensure classifier_config.json exists and is properly formatted.")
     raise
 
-# OpenRouter API Configuration
+# LLM API Configuration
+# OPENROUTER_API_KEY is sent as the bearer token to whichever endpoint is
+# configured below (OpenRouter by default, or a LiteLLM/OpenAI-compatible gateway).
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+# Optional override for the OpenAI-compatible API base URL (e.g. a LiteLLM proxy).
+# Empty/whitespace values are treated as unset so the OpenRouter default applies.
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "").strip() or OPENROUTER_BASE_URL
 
 # Model Configuration - Load from file if available, otherwise from env vars
 MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH")

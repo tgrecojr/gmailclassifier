@@ -24,12 +24,13 @@ class EmailClassifierAgent:
             headless=config.GMAIL_HEADLESS_MODE,
         )
 
-        # Initialize OpenRouter classifier
+        # Initialize LLM classifier (OpenRouter by default, or a custom gateway)
         self.classifier = OpenRouterClassifier(
             api_key=config.OPENROUTER_API_KEY,
             model=config.OPENROUTER_MODEL,
             temperature=config.OPENROUTER_TEMPERATURE,
             max_tokens=config.OPENROUTER_MAX_TOKENS,
+            base_url=config.LLM_BASE_URL,
         )
 
         # Create Gmail labels if they don't exist
@@ -41,7 +42,8 @@ class EmailClassifierAgent:
         self.processed_emails: Dict[str, str] = self._load_state()
 
         logger.info(
-            f"Email Classifier Agent initialized with OpenRouter (model: {config.OPENROUTER_MODEL})"
+            f"Email Classifier Agent initialized with LLM endpoint "
+            f"{config.LLM_BASE_URL} (model: {config.OPENROUTER_MODEL})"
         )
         logger.info(
             f"Loaded {len(self.processed_emails)} processed emails from state "

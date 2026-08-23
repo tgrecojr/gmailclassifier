@@ -6,7 +6,7 @@ from unittest.mock import Mock, MagicMock, patch
 
 import pytest
 
-from openrouter_classifier import OpenRouterClassifier
+from openrouter_classifier import OpenRouterClassifier, OPENROUTER_BASE_URL
 
 
 @pytest.fixture
@@ -70,13 +70,37 @@ class TestOpenRouterClassifierInit:
     def test_init_configures_openrouter_base_url(self):
         with patch("openai.OpenAI") as mock_openai:
             mock_openai.return_value = MagicMock()
-            OpenRouterClassifier(api_key="test-key")
+            classifier = OpenRouterClassifier(api_key="test-key")
 
         _, kwargs = mock_openai.call_args
         assert kwargs["api_key"] == "test-key"
         assert kwargs["base_url"] == "https://openrouter.ai/api/v1"
         assert "HTTP-Referer" in kwargs["default_headers"]
         assert "X-Title" in kwargs["default_headers"]
+        assert classifier.base_url == OPENROUTER_BASE_URL
+        assert classifier.provider_name == "openrouter.ai"
+
+    def test_init_custom_base_url_is_passed_to_client(self):
+        with patch("openai.OpenAI") as mock_openai:
+            mock_openai.return_value = MagicMock()
+            classifier = OpenRouterClassifier(
+                api_key="test-key", base_url="http://litellm:4000/v1"
+            )
+
+        _, kwargs = mock_openai.call_args
+        assert kwargs["base_url"] == "http://litellm:4000/v1"
+        assert classifier.base_url == "http://litellm:4000/v1"
+        assert classifier.provider_name == "litellm:4000"
+
+    @pytest.mark.parametrize("empty_value", [None, ""])
+    def test_init_empty_base_url_falls_back_to_openrouter(self, empty_value):
+        with patch("openai.OpenAI") as mock_openai:
+            mock_openai.return_value = MagicMock()
+            classifier = OpenRouterClassifier(api_key="test-key", base_url=empty_value)
+
+        _, kwargs = mock_openai.call_args
+        assert kwargs["base_url"] == OPENROUTER_BASE_URL
+        assert classifier.base_url == OPENROUTER_BASE_URL
 
 
 @pytest.mark.unit

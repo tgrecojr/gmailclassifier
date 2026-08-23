@@ -28,7 +28,7 @@ def main():
     os.environ["ANONYMIZED_TELEMETRY"] = "false"
     """Main entry point for the email classifier agent."""
     parser = argparse.ArgumentParser(
-        description="Gmail Email Classifier Agent with OpenRouter"
+        description="Gmail Email Classifier Agent (OpenRouter or OpenAI-compatible gateway)"
     )
     parser.add_argument(
         "--log-level",
@@ -46,7 +46,7 @@ def main():
     logger.info("=" * 60)
     logger.info("Gmail Email Classifier Agent")
     logger.info("=" * 60)
-    logger.info(f"LLM Provider: OpenRouter")
+    logger.info(f"LLM Base URL: {config.LLM_BASE_URL}")
     logger.info(f"Model: {config.OPENROUTER_MODEL}")
     logger.info(f"Labels: {', '.join(config.LABELS)}")
     logger.info(f"Poll Interval: {config.POLL_INTERVAL_SECONDS}s")

@@ -6,6 +6,7 @@ An intelligent email classification system that automatically reads, categorizes
 
 - **Automatic Email Processing**: Continuously monitors your Gmail inbox for unread emails
 - **AI-Powered Classification**: Uses OpenRouter API for access to multiple AI models (Claude, GPT-4, and more)
+- **Gateway Friendly**: Point `LLM_BASE_URL` at any OpenAI-compatible endpoint (e.g. a local [LiteLLM](https://docs.litellm.ai/) proxy) to add sanitization, prompt-injection screening, or routing in front of the model
 - **Multi-Label Support**: Emails can be assigned multiple labels simultaneously
 - **Gmail Integration**: Seamlessly integrates with Gmail API for reading and labeling emails
 - **Fully Customizable**: Configure your own label categories and classification rules via JSON config file
@@ -59,6 +60,27 @@ OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
 - `meta-llama/llama-3.1-70b-instruct` - Open source option
 
 See [OpenRouter Models](https://openrouter.ai/docs#models) for the full list of available models.
+
+### Using a LiteLLM or Other OpenAI-Compatible Gateway
+
+By default the classifier talks directly to OpenRouter. To route requests through a gateway instead (for example a local [LiteLLM](https://docs.litellm.ai/) proxy that adds sanitization, prompt-injection screening, logging, or routing), set `LLM_BASE_URL`:
+
+```bash
+# .env
+LLM_BASE_URL=http://litellm.lan:4000/v1
+OPENROUTER_API_KEY=sk-your-litellm-virtual-key
+OPENROUTER_MODEL=openrouter/anthropic/claude-3.5-sonnet   # must match a model name your gateway exposes
+```
+
+How it works:
+
+- **`LLM_BASE_URL` is optional.** If it is unset or empty, requests go to `https://openrouter.ai/api/v1` exactly as before. Existing deployments need no changes.
+- **`OPENROUTER_API_KEY` is used regardless of provider.** The variable name is kept for backward compatibility; its value is sent as the `Authorization: Bearer` token to whichever endpoint is configured. With LiteLLM, set it to a LiteLLM virtual key (or the master key). The OpenAI client refuses an empty key, so even a gateway with auth disabled needs a non-empty placeholder here.
+- **Model names are resolved by the gateway.** `OPENROUTER_MODEL` / `model_config.json` must name a model the gateway knows. With LiteLLM that is whatever `model_name` you configured in its `model_list` (e.g. `openrouter/anthropic/claude-3.5-sonnet` or an alias you defined) - not necessarily the raw OpenRouter ID.
+- **URL shape.** The client appends `/chat/completions` to `LLM_BASE_URL`. LiteLLM serves both `/v1/chat/completions` and `/chat/completions`, so `http://host:4000` and `http://host:4000/v1` both work; the `/v1` form is recommended for parity with OpenRouter.
+- **Docker networking.** Inside a container, `localhost` is the container itself. If LiteLLM runs on the Docker host, use `http://host.docker.internal:4000/v1`; if it runs in another Compose service, use that service name; otherwise use the host's LAN IP or DNS name.
+
+The startup banner logs `LLM Base URL: ...` so you can confirm which endpoint is in use. `uv run python verify_setup.py` will also probe the configured endpoint with your key.
 
 ### Model Configuration
 
@@ -169,9 +191,12 @@ Then edit `model_config.json` to configure model settings (model, temperature, m
 6. Edit `.env` with your credentials:
 
 ```bash
-# OpenRouter API Configuration
+# LLM API Configuration
+# OPENROUTER_API_KEY is sent as the bearer token to whichever endpoint is used
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
+# Optional: route through a LiteLLM / OpenAI-compatible gateway instead of OpenRouter
+# LLM_BASE_URL=http://litellm.lan:4000/v1
 
 # Gmail API Configuration
 GMAIL_CREDENTIALS_PATH=credentials.json
@@ -394,7 +419,8 @@ The application includes robust error handling:
 ## Security Considerations
 
 - Never commit `credentials.json`, `token.json`, or `.env` to version control
-- Store OpenRouter API key securely
+- Store your LLM API key (`OPENROUTER_API_KEY`) securely
+- If `LLM_BASE_URL` points at a plain-`http` gateway, keep it on a trusted network - email content travels over that link
 - Use environment variables or secrets management for production deployments
 - Regularly rotate API keys
 - Review Gmail API OAuth scopes to ensure minimum necessary permissions
@@ -444,7 +470,7 @@ uv sync --frozen
 
 Download OAuth credentials from Google Cloud Console and save as `credentials.json`.
 
-### "Error classifying email with OpenRouter"
+### "Error classifying email via openrouter.ai"
 
 Check that:
 1. Your OpenRouter API key is valid and set in `.env`
@@ -452,9 +478,19 @@ Check that:
 3. The model ID is correct (see [OpenRouter Models](https://openrouter.ai/docs#models))
 4. Your internet connection is working
 
+### "Error classifying email via <your-gateway-host>"
+
+You are using `LLM_BASE_URL`. Check that:
+1. The gateway is reachable from where the classifier runs (from Docker, `localhost` is the container - see [gateway notes](#using-a-litellm-or-other-openai-compatible-gateway))
+2. `OPENROUTER_API_KEY` holds a key the gateway accepts (e.g. a LiteLLM virtual key)
+3. The model name matches one the gateway exposes (`GET <LLM_BASE_URL>/models` lists them)
+4. The gateway's own logs - a sanitization or prompt-injection guard may be rejecting the request
+
+`uv run python verify_setup.py` checks reachability and the key in one step.
+
 ### "Model not found" or "Invalid model ID"
 
-Verify the model ID in `.env` matches an available OpenRouter model. Check the [OpenRouter Models documentation](https://openrouter.ai/docs#models) for available models.
+Verify the model ID in `.env` matches an available OpenRouter model. Check the [OpenRouter Models documentation](https://openrouter.ai/docs#models) for available models. When using a gateway, the name must instead match what the gateway exposes.
 
 ## OpenRouter Pricing
 
