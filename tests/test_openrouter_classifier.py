@@ -14,7 +14,53 @@ from openrouter_classifier import (
     OPENROUTER_BASE_URL,
     SYSTEM_PROMPT,
     OpenRouterClassifier,
+    is_json_mode_rejection,
 )
+
+# Verbatim error body returned by LiteLLM when the llmprotect guardrail blocks
+# a request (captured from production logs, 2026-08-23 18:11:40 UTC).
+GUARD_BLOCK_MESSAGE = (
+    "Error code: 400 - {'error': {'message': \"prompt injection detected "
+    "(risk=0.855 >= threshold 0.85) in chunk 2/3: 'ing, now is the time to "
+    "register. REGISTER NOW < https://my.myeloma.org > During this free online "
+    "workshop, leading exp…'\", 'type': 'None', 'param': 'None', 'code': '400'}}"
+)
+
+
+@pytest.mark.unit
+class TestIsJsonModeRejection:
+    """Only 400s that name the response_format parameter count as rejections."""
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            # OpenAI
+            "Invalid parameter: 'response_format' of type 'json_object' is not "
+            "supported with this model.",
+            # OpenRouter
+            "Error code: 400 - {'error': {'message': 'This model does not "
+            "support response_format', 'code': 400}}",
+            # Generic phrasing
+            "JSON mode is not available for this deployment",
+            "json_object is unsupported",
+        ],
+    )
+    def test_response_format_rejections_match(self, message):
+        assert is_json_mode_rejection(_bad_request_error(message)) is True
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            GUARD_BLOCK_MESSAGE,
+            "Error code: 400 - {'error': {'message': 'prompt injection detected "
+            "(risk=1.000 >= threshold 0.85)', 'type': 'None', 'param': 'None', "
+            "'code': '400'}}",
+            "Error code: 400 - {'error': {'message': 'context length exceeded'}}",
+            "Error code: 400 - {'error': {'message': 'Invalid model name'}}",
+        ],
+    )
+    def test_other_400s_do_not_match(self, message):
+        assert is_json_mode_rejection(_bad_request_error(message)) is False
 
 
 @pytest.fixture
@@ -260,6 +306,46 @@ class TestOpenRouterClassifyEmail:
         assert result == []
         assert classifier.json_mode is True
         assert classifier.client.chat.completions.create.call_count == 1
+
+    def test_guardrail_block_400_is_not_treated_as_json_mode_rejection(
+        self, sample_email, available_labels, classification_prompt, caplog
+    ):
+        """
+        A gateway guardrail (LiteLLM + llmprotect) answers 400 for prompt-
+        injection blocks. That must not trigger the no-JSON retry (which costs
+        a second guard scan) and must not disable JSON mode for later emails.
+        Regression for the 2026-08-23 myeloma.org incident.
+        """
+        import logging
+
+        caplog.set_level(logging.WARNING)
+        classifier = self._build_classifier()
+        classifier.client.chat.completions.create.side_effect = _bad_request_error(
+            GUARD_BLOCK_MESSAGE
+        )
+
+        result = classifier.classify_email(
+            sample_email, classification_prompt, available_labels
+        )
+
+        assert result == []
+        assert classifier.json_mode is True
+        assert classifier.client.chat.completions.create.call_count == 1
+        assert "rejected JSON response_format" not in caplog.text
+        assert "prompt injection detected" in caplog.text
+
+        # JSON mode is still requested on the next email
+        classifier.client.chat.completions.create.reset_mock(side_effect=True)
+        classifier.client.chat.completions.create.return_value = _mock_openai_response(
+            '{"labels": ["Work"]}'
+        )
+        classifier.classify_email(sample_email, classification_prompt, available_labels)
+        assert (
+            classifier.client.chat.completions.create.call_args.kwargs[
+                "response_format"
+            ]
+            == JSON_RESPONSE_FORMAT
+        )
 
     def test_classify_email_returns_empty_when_api_errors(
         self, sample_email, available_labels, classification_prompt
