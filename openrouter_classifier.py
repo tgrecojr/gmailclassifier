@@ -6,6 +6,7 @@ Defaults to the OpenRouter API, but any OpenAI-compatible endpoint
 """
 
 import logging
+import re
 from typing import List, Dict, Optional
 from urllib.parse import urlparse
 
@@ -42,6 +43,17 @@ SYSTEM_PROMPT = (
 
 # OpenAI-compatible JSON mode: constrains the model to emit a JSON object.
 JSON_RESPONSE_FORMAT = {"type": "json_object"}
+
+# A 400 is only treated as "this endpoint/model doesn't support JSON mode" when
+# the error message names the parameter. Gateways with blocking guardrails
+# (e.g. LiteLLM + llmprotect) also answer 400 for prompt-injection blocks, and
+# those must not disable JSON mode or be retried.
+_JSON_MODE_REJECTION = re.compile(r"response_format|json_object|json[ _]mode", re.I)
+
+
+def is_json_mode_rejection(error: Exception) -> bool:
+    """True if a BadRequestError is the endpoint rejecting response_format."""
+    return bool(_JSON_MODE_REJECTION.search(str(error)))
 
 
 class OpenRouterClassifier:
@@ -119,6 +131,10 @@ class OpenRouterClassifier:
                 response_format=JSON_RESPONSE_FORMAT, **kwargs
             )
         except openai.BadRequestError as e:
+            if not is_json_mode_rejection(e):
+                # Some other 400 (typically a guardrail block): surface it
+                # unchanged and keep JSON mode on.
+                raise
             logger.warning(
                 f"{self.provider_name} rejected JSON response_format "
                 f"({e}); retrying without it and disabling JSON mode"
