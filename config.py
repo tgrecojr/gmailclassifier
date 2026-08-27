@@ -1,6 +1,7 @@
-import os
 import json
+import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 from openrouter_classifier import OPENROUTER_BASE_URL
 
@@ -30,7 +31,7 @@ def load_classifier_config(config_path: str) -> dict:
         )
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             config = json.load(f)
 
         # Validate required fields
@@ -74,7 +75,7 @@ def load_model_config(config_path: str) -> dict:
         )
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             config = json.load(f)
 
         # Validate required fields
@@ -159,9 +160,14 @@ STATE_FILE = os.getenv("STATE_FILE", ".email_state.json")
 STATE_RETENTION_DAYS = int(os.getenv("STATE_RETENTION_DAYS", "30"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
-# Retry policy for emails the LLM endpoint rejects with HTTP 400 (e.g. a
-# gateway guardrail block). Total attempts including the first; the wait
-# doubles after each failure starting from the base (30m, 1h, 2h, 4h ...).
-# REJECTED_MAX_ATTEMPTS=1 disables retries.
-REJECTED_MAX_ATTEMPTS = int(os.getenv("REJECTED_MAX_ATTEMPTS", "5"))
+# Policy for emails the LLM endpoint rejects with HTTP 400 (a gateway
+# guardrail block). A block is deterministic for a given email, so by default
+# there is no retry: the email gets REJECTED_LABEL (left in the inbox, not
+# archived) and is marked processed — the block becomes a visible signal
+# instead of a silent gap. Set REJECTED_LABEL empty to skip the label.
+# REJECTED_MAX_ATTEMPTS > 1 re-enables backed-off retries (30m, 1h, 2h ...)
+# for the case where the guard is being retuned; the label is applied only
+# when the last attempt is also rejected.
+REJECTED_LABEL = os.getenv("REJECTED_LABEL", "Flagged").strip()
+REJECTED_MAX_ATTEMPTS = int(os.getenv("REJECTED_MAX_ATTEMPTS", "1"))
 REJECTED_RETRY_BASE_MINUTES = int(os.getenv("REJECTED_RETRY_BASE_MINUTES", "30"))

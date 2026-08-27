@@ -2,17 +2,16 @@
 Unit tests for openrouter_classifier.py
 """
 
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import httpx2
 import openai
 import pytest
 
-from llm_utils import EMAIL_CLOSE_TAG, EMAIL_OPEN_TAG
+from llm_utils import EMAIL_CLOSE_TAG, EMAIL_OPEN_TAG, construct_system_prompt
 from openrouter_classifier import (
     JSON_RESPONSE_FORMAT,
     OPENROUTER_BASE_URL,
-    SYSTEM_PROMPT,
     ClassificationRejected,
     OpenRouterClassifier,
     is_json_mode_rejection,
@@ -229,7 +228,9 @@ class TestOpenRouterClassifyEmail:
 
         _, kwargs = classifier.client.chat.completions.create.call_args
         system, user = kwargs["messages"]
-        assert system["content"] == SYSTEM_PROMPT
+        assert system["content"] == construct_system_prompt(
+            classification_prompt, available_labels
+        )
         assert sample_email["subject"] not in system["content"]
         assert sample_email["body"] not in system["content"]
         assert "untrusted data" in system["content"]
@@ -237,6 +238,31 @@ class TestOpenRouterClassifyEmail:
         assert f"{EMAIL_OPEN_TAG}\n" in user["content"]
         assert f"\n{EMAIL_CLOSE_TAG}" in user["content"]
         assert sample_email["body"] in user["content"]
+
+    def test_instructions_are_in_system_message_not_user(
+        self, sample_email, available_labels, classification_prompt
+    ):
+        """The user message is only the fenced email: the upstream injection
+        guard scans it, and our own instructions there read as an injection
+        (90% of real mail blocked, 2026-08-23→27)."""
+        classifier = self._build_classifier()
+        classifier.client.chat.completions.create.return_value = _mock_openai_response(
+            '{"labels": []}'
+        )
+
+        classifier.classify_email(sample_email, classification_prompt, available_labels)
+
+        _, kwargs = classifier.client.chat.completions.create.call_args
+        system, user = kwargs["messages"]
+        assert user["content"].startswith(EMAIL_OPEN_TAG + "\n")
+        assert user["content"].endswith("\n" + EMAIL_CLOSE_TAG)
+        assert classification_prompt in system["content"]
+        assert classification_prompt not in user["content"]
+        for label in available_labels:
+            assert label in system["content"]
+        assert "Available labels" not in user["content"]
+        assert "JSON" not in user["content"]
+        assert "Respond with" not in user["content"]
 
     def test_tracking_urls_stripped_before_sending(
         self, available_labels, classification_prompt
