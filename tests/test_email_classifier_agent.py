@@ -5,9 +5,10 @@ Unit tests for EmailClassifierAgent with state tracking.
 import json
 import os
 import tempfile
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
+
+import pytest
 from email_classifier_agent import EmailClassifierAgent
 
 
@@ -41,6 +42,7 @@ def mock_config_with_state(temp_state_file):
         mock_config.LABELS = ["AWS", "Github", "Shipping"]
         mock_config.CLASSIFICATION_PROMPT = "Test classification prompt for unit tests"
         mock_config.REMOVE_FROM_INBOX = True
+        mock_config.REJECTED_LABEL = "Flagged"
         mock_config.REJECTED_MAX_ATTEMPTS = 3
         mock_config.REJECTED_RETRY_BASE_MINUTES = 30
         yield mock_config
@@ -135,14 +137,14 @@ class TestEmailClassifierAgentStateTracking:
         from datetime import datetime
 
         agent = EmailClassifierAgent()
-        timestamp1 = datetime.now(timezone.utc).isoformat()
-        timestamp2 = datetime.now(timezone.utc).isoformat()
+        timestamp1 = datetime.now(UTC).isoformat()
+        timestamp2 = datetime.now(UTC).isoformat()
         agent.processed_emails["email1"] = timestamp1
         agent.processed_emails["email2"] = timestamp2
         agent._save_state()
 
         # Verify state file contents
-        with open(mock_config_with_state.STATE_FILE, "r") as f:
+        with open(mock_config_with_state.STATE_FILE) as f:
             state_data = json.load(f)
         assert "email1" in state_data["processed_emails"]
         assert "email2" in state_data["processed_emails"]
@@ -160,11 +162,11 @@ class TestEmailClassifierAgentStateTracking:
             mock_config_with_state.STATE_FILE = state_path
 
             agent = EmailClassifierAgent()
-            agent.processed_emails["email1"] = datetime.now(timezone.utc).isoformat()
+            agent.processed_emails["email1"] = datetime.now(UTC).isoformat()
             agent._save_state()
 
             assert os.path.exists(state_path)
-            with open(state_path, "r") as f:
+            with open(state_path) as f:
                 state_data = json.load(f)
             assert "email1" in state_data["processed_emails"]
 
@@ -187,7 +189,7 @@ class TestEmailClassifierAgentStateTracking:
         assert "test_email_123" in agent.processed_emails
 
         # Verify state was saved to disk
-        with open(mock_config_with_state.STATE_FILE, "r") as f:
+        with open(mock_config_with_state.STATE_FILE) as f:
             state_data = json.load(f)
         assert "test_email_123" in state_data["processed_emails"]
 
@@ -326,7 +328,7 @@ class TestEmailClassifierAgentStateTracking:
             assert f"email_{i}" in agent.processed_emails
 
         # Verify state file
-        with open(mock_config_with_state.STATE_FILE, "r") as f:
+        with open(mock_config_with_state.STATE_FILE) as f:
             state_data = json.load(f)
         assert len(state_data["processed_emails"]) == 5
 
@@ -347,9 +349,9 @@ class TestEmailClassifierAgentStateTracking:
         mock_config_with_state.STATE_RETENTION_DAYS = 7
 
         # Create state with old and new emails
-        old_timestamp = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
-        recent_timestamp = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
-        current_timestamp = datetime.now(timezone.utc).isoformat()
+        old_timestamp = (datetime.now(UTC) - timedelta(days=10)).isoformat()
+        recent_timestamp = (datetime.now(UTC) - timedelta(days=3)).isoformat()
+        current_timestamp = datetime.now(UTC).isoformat()
 
         state_data = {
             "processed_emails": {
@@ -404,9 +406,7 @@ class TestEmailClassifierAgentStateTracking:
         mock_config_with_state.STATE_RETENTION_DAYS = 0
 
         # Create state with very old emails
-        very_old_timestamp = (
-            datetime.now(timezone.utc) - timedelta(days=365)
-        ).isoformat()
+        very_old_timestamp = (datetime.now(UTC) - timedelta(days=365)).isoformat()
 
         state_data = {
             "processed_emails": {
@@ -435,8 +435,8 @@ class TestEmailClassifierAgentStateTracking:
         agent = EmailClassifierAgent()
 
         # Add old and new emails
-        old_timestamp = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
-        new_timestamp = datetime.now(timezone.utc).isoformat()
+        old_timestamp = (datetime.now(UTC) - timedelta(days=10)).isoformat()
+        new_timestamp = datetime.now(UTC).isoformat()
 
         agent.processed_emails["old_email"] = old_timestamp
         agent.processed_emails["new_email"] = new_timestamp
@@ -476,7 +476,7 @@ class TestEmailClassifierAgentStateTracking:
         timestamp = datetime.fromisoformat(timestamp_str)
 
         # Timestamp should be recent (within last minute)
-        time_diff = datetime.now(timezone.utc) - timestamp
+        time_diff = datetime.now(UTC) - timestamp
         assert time_diff.total_seconds() < 60
 
 
@@ -552,7 +552,7 @@ class TestRejectedEmailRetry:
 
         # Guard was tuned in the meantime; make the retry due now
         agent.retries.entries["blocked_1"]["next_attempt"] = datetime.now(
-            timezone.utc
+            UTC
         ).isoformat()
         mock_llm_provider.classify_email.side_effect = None
         mock_llm_provider.classify_email.return_value = ["AWS"]
@@ -581,7 +581,7 @@ class TestRejectedEmailRetry:
             assert agent.retries.attempts("blocked_1") == expected_attempts
             assert "blocked_1" not in agent.processed_emails
             agent.retries.entries["blocked_1"]["next_attempt"] = datetime.now(
-                timezone.utc
+                UTC
             ).isoformat()
 
         result = agent.process_email(self.EMAIL)
@@ -590,11 +590,60 @@ class TestRejectedEmailRetry:
         assert "blocked_1" in agent.processed_emails
         assert "blocked_1" not in agent.retries.entries
         assert mock_llm_provider.classify_email.call_count == 3
-        assert "Giving up on rejected email after 3 attempt(s)" in caplog.text
+        assert "Rejected after 3 attempt(s); labeled Flagged" in caplog.text
+        mock_gmail_client.add_labels_to_message.assert_called_once_with(
+            "blocked_1", ["label_id_Flagged"], remove_from_inbox=False
+        )
 
         # Fourth poll: skipped as processed, no further endpoint calls
         assert agent.process_email(self.EMAIL) is True
         assert mock_llm_provider.classify_email.call_count == 3
+
+    def test_default_policy_flags_on_first_rejection_without_retry(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        """REJECTED_MAX_ATTEMPTS=1 (the default): a guard block is deterministic,
+        so the email is labeled Flagged, left in the inbox, marked processed,
+        and never sent to the endpoint again."""
+        mock_config_with_state.REJECTED_MAX_ATTEMPTS = 1
+        agent = EmailClassifierAgent()
+        self._reject(mock_llm_provider)
+
+        result = agent.process_email(self.EMAIL)
+
+        assert result is False
+        assert "blocked_1" in agent.processed_emails
+        assert agent.retries.entries == {}
+        mock_gmail_client.add_labels_to_message.assert_called_once_with(
+            "blocked_1", ["label_id_Flagged"], remove_from_inbox=False
+        )
+
+        assert agent.process_email(self.EMAIL) is True
+        assert mock_llm_provider.classify_email.call_count == 1
+
+    def test_rejected_label_is_created_at_startup(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        agent = EmailClassifierAgent()
+
+        mock_gmail_client.create_label_if_not_exists.assert_any_call("Flagged")
+        assert agent.rejected_label_id == "label_id_Flagged"
+
+    def test_empty_rejected_label_disables_labeling(
+        self, mock_config_with_state, mock_gmail_client, mock_llm_provider
+    ):
+        mock_config_with_state.REJECTED_LABEL = ""
+        mock_config_with_state.REJECTED_MAX_ATTEMPTS = 1
+        agent = EmailClassifierAgent()
+        self._reject(mock_llm_provider)
+
+        agent.process_email(self.EMAIL)
+
+        assert agent.rejected_label_id is None
+        assert "blocked_1" in agent.processed_emails
+        mock_gmail_client.add_labels_to_message.assert_not_called()
+        for call in mock_gmail_client.create_label_if_not_exists.call_args_list:
+            assert call.args[0] != ""
 
     def test_give_up_is_persisted(
         self, mock_config_with_state, mock_gmail_client, mock_llm_provider
@@ -628,7 +677,7 @@ class TestRejectedEmailRetry:
     ):
         from datetime import timedelta
 
-        old = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+        old = (datetime.now(UTC) - timedelta(days=45)).isoformat()
         with open(mock_config_with_state.STATE_FILE, "w") as f:
             json.dump(
                 {
@@ -653,9 +702,7 @@ class TestRejectedEmailRetry:
         self, mock_config_with_state, mock_gmail_client, mock_llm_provider
     ):
         with open(mock_config_with_state.STATE_FILE, "w") as f:
-            json.dump(
-                {"processed_emails": {"e1": datetime.now(timezone.utc).isoformat()}}, f
-            )
+            json.dump({"processed_emails": {"e1": datetime.now(UTC).isoformat()}}, f)
 
         agent = EmailClassifierAgent()
 

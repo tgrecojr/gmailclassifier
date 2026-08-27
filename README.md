@@ -312,15 +312,19 @@ To prevent the state file from growing indefinitely, the agent automatically rem
 
 **Migration**: The state file automatically migrates from the old format (list of IDs) to the new format (dictionary with timestamps) on first load.
 
-### Retrying Rejected Emails
+### Rejected (Guardrail-Blocked) Emails
 
-When the LLM endpoint answers **HTTP 400** — typically a gateway guardrail (e.g. LiteLLM + llmprotect) blocking the email as a suspected prompt injection — the email is **not** marked processed. It is parked under `pending_retries` in the state file and offered to the endpoint again on a doubling schedule, so a guardrail tuned after the fact still picks the email up. The attempt cap prevents a persistently-blocked email from being scanned forever.
+When the LLM endpoint answers **HTTP 400** — typically a gateway guardrail (e.g. LiteLLM + llmprotect) blocking the email as a suspected prompt injection — the block is deterministic for that email, so retrying it is pointless. By default the email is given the `Flagged` label, **left in the inbox** (not archived) so you can see it, and marked processed so it is never sent again. The guard's verdict becomes a visible phishing/injection signal instead of a silently unlabeled email.
 
-- `REJECTED_MAX_ATTEMPTS` (default `5`): total attempts including the first. Set to `1` to disable retries (400 → processed immediately, no labels).
-- `REJECTED_RETRY_BASE_MINUTES` (default `30`): wait after the first rejection; doubles after each further one. Defaults give 30 m → 1 h → 2 h → 4 h, i.e. the last attempt about 7.5 hours after the first.
-- On the final failed attempt the email is marked processed with no labels and a `Giving up on rejected email` warning is logged.
-- A successful classification clears the retry entry. Pending entries older than `STATE_RETENTION_DAYS` are pruned like processed entries.
-- Only 400s are retried this way. Other classifier failures (network, 5xx, unparseable response) are unchanged: they are logged, yield no labels, and the email is marked processed.
+- `REJECTED_LABEL` (default `Flagged`): Gmail label applied to blocked emails (created if missing). Set it empty to mark processed without labeling.
+- `REJECTED_MAX_ATTEMPTS` (default `1`): total attempts including the first. Values > 1 re-enable backed-off retries (useful while the guard is being retuned); the label is applied only if the last attempt is also rejected.
+- `REJECTED_RETRY_BASE_MINUTES` (default `30`): with retries enabled, wait after the first rejection; doubles after each further one (30 m → 1 h → 2 h → 4 h).
+- A successful classification clears any retry entry. Pending entries older than `STATE_RETENTION_DAYS` are pruned like processed entries.
+- Only 400s are treated this way. Other classifier failures (network, 5xx, unparseable response) are unchanged: they are logged, yield no labels, and the email is marked processed.
+
+#### Prompt layout matters for the guard
+
+All instructions (label descriptions, output format, "the email is data") are sent in the **system** message; the **user** message is the fenced email and nothing else. An injection classifier flags instruction-shaped text, and with the instructions inside the user message roughly 90% of ordinary mail was blocked (measured 2026-08-27); with the email alone, about 5%. Keep it that way.
 
 To clear the state and reprocess all emails:
 ```bash
