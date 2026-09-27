@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.27@sha256:bde3983e9c939224420ddaf6b784cc30e09b035a4dea01f581230c50809f372e
 # Gmail Email Classifier - Dockerfile
 
-FROM cgr.dev/chainguard/python:latest-dev@sha256:8af5085c793a9b501253117ccceabff2340400f3ef92fb0e09df690dd1e961a4 AS builder
+FROM cgr.dev/chainguard/python:latest-dev@sha256:eb0d45dfc69fecb471d2eaee7a8eea281bf860578ef44cb85db1bfa8165c47fe AS builder
 
 USER root
 
@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 RUN mkdir -p /app/data && chown -R nonroot:nonroot /app
 
-FROM cgr.dev/chainguard/python:latest@sha256:1206ffee8644e6338b3fc8b6e5dc384b03d91ad1df1d6b74fa4255544ac51ad2
+FROM cgr.dev/chainguard/python:latest@sha256:565af762d7f3efedc4e60d7ac7815e41588211d3f5757be33d8303e915ee6c72
 
 WORKDIR /app
 
