@@ -3,7 +3,7 @@
 Gmail Email Classifier Agent
 
 Reads unread Gmail messages and labels them with Jev, TypeSafe's
-non-generative decision model, via OpenRouter or a LiteLLM gateway.
+non-generative decision model, via OpenRouter.
 """
 
 import argparse
@@ -13,6 +13,7 @@ import sys
 
 import config
 from email_classifier_agent import EmailClassifierAgent
+from jev_classifier import OPENROUTER_DECISIONS_URL
 
 
 def setup_logging(level: str = "INFO"):
@@ -30,7 +31,7 @@ def main():
     """Main entry point for the email classifier agent."""
     os.environ["ANONYMIZED_TELEMETRY"] = "false"
     parser = argparse.ArgumentParser(
-        description="Gmail Email Classifier Agent (Jev via OpenRouter or a LiteLLM gateway)"
+        description="Gmail Email Classifier Agent (Jev via OpenRouter)"
     )
     parser.add_argument(
         "--log-level",
@@ -48,7 +49,7 @@ def main():
     logger.info("=" * 60)
     logger.info("Gmail Email Classifier Agent")
     logger.info("=" * 60)
-    logger.info(f"Decisions URL: {config.JEV_DECISIONS_URL}")
+    logger.info(f"Decisions URL: {OPENROUTER_DECISIONS_URL}")
     logger.info(f"Model: {config.JEV_MODEL}")
     logger.info(
         f"Thresholds: label >= {config.JEV_LABEL_THRESHOLD}, "

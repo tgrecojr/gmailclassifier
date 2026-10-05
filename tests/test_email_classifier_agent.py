@@ -56,7 +56,6 @@ def mock_config(temp_state_file):
         cfg.LABELS = LABELS
         cfg.LABEL_DESCRIPTIONS = DESCRIPTIONS
         cfg.JEV_MODEL = "typesafe/jev-1.13"
-        cfg.JEV_DECISIONS_URL = "http://litellm:4000/openrouter/alpha/decisions"
         cfg.JEV_LABEL_THRESHOLD = 0.7
         cfg.JEV_FALLBACK_CONFIDENCE = 0.5
         cfg.JEV_TIMEOUT_SECONDS = 30.0
@@ -102,7 +101,6 @@ class TestEmailClassifierAgentInit:
             labels=LABELS,
             label_descriptions=DESCRIPTIONS,
             model="typesafe/jev-1.13",
-            decisions_url="http://litellm:4000/openrouter/alpha/decisions",
             label_threshold=0.7,
             fallback_confidence=0.5,
             timeout_seconds=30.0,

@@ -16,9 +16,6 @@ RED = "\033[91m"
 YELLOW = "\033[93m"
 RESET = "\033[0m"
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-LITELLM_MIN_VERSION = "v1.104.0"
-
 
 def check_file_exists(filepath: str, name: str) -> bool:
     """Check if a file exists."""
@@ -104,27 +101,16 @@ def check_classifier_config(path: str) -> bool:
     return True
 
 
-def resolve_decisions_url() -> str:
-    """Return the effective decisions URL (mirrors config.py logic)."""
-    from jev_classifier import decisions_url_for
-
-    explicit = os.getenv("JEV_DECISIONS_URL", "").strip()
-    if explicit:
-        return explicit
-    return decisions_url_for(
-        os.getenv("LLM_BASE_URL", "").strip() or OPENROUTER_BASE_URL
-    )
-
-
 def check_jev_endpoint() -> bool:
-    """Send one tiny decision (~$0.00002) to prove the route, key and model work."""
-    from jev_classifier import DEFAULT_MODEL, JevClassifier, JevRequestError
-
-    url = resolve_decisions_url()
-    via_gateway = "openrouter.ai" not in url
-    print(
-        f"  Endpoint: {url} ({'via gateway' if via_gateway else 'OpenRouter direct'})"
+    """Send one tiny decision (~$0.00002) to prove the key and model work."""
+    from jev_classifier import (
+        DEFAULT_MODEL,
+        OPENROUTER_DECISIONS_URL,
+        JevClassifier,
+        JevRequestError,
     )
+
+    print(f"  Endpoint: {OPENROUTER_DECISIONS_URL}")
 
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key:
@@ -136,7 +122,6 @@ def check_jev_endpoint() -> bool:
         labels=["Probe"],
         label_descriptions={"Probe": "A short test message"},
         model=os.getenv("JEV_MODEL", "").strip() or DEFAULT_MODEL,
-        decisions_url=url,
         timeout_seconds=30,
         retry_delay_seconds=0,
     )
@@ -146,17 +131,9 @@ def check_jev_endpoint() -> bool:
         print(f"{RED}✗{RESET} Decisions endpoint failed: {e}")
         message = str(e)
         if "HTTP 401" in message or "HTTP 403" in message:
-            print(f"{YELLOW}  Hint:{RESET} the endpoint rejected OPENROUTER_API_KEY")
-        elif "HTTP 404" in message and via_gateway:
-            print(
-                f"{YELLOW}  Hint:{RESET} the gateway does not serve /openrouter/alpha/decisions; "
-                f"LiteLLM {LITELLM_MIN_VERSION} or newer is required"
-            )
-        elif "transport error" in message and via_gateway:
-            print(
-                f"{YELLOW}  Hint:{RESET} if running in Docker, 'localhost' refers to the "
-                "container - use host.docker.internal or the LAN IP instead"
-            )
+            print(f"{YELLOW}  Hint:{RESET} OpenRouter rejected OPENROUTER_API_KEY")
+        elif "HTTP 402" in message:
+            print(f"{YELLOW}  Hint:{RESET} the OpenRouter account has no credits")
         return False
 
     probe = answers.get("is_Probe", {}).get("noul")

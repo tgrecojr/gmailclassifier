@@ -8,7 +8,6 @@ An email classification system that automatically reads, categorizes, and labels
 - **Decision model, not a chatbot**: Jev answers typed yes/no questions with probabilities. It emits no text, follows no instructions, and cannot pick a label outside the set you configure
 - **Multi-Label Support**: Every label is scored independently, so an email can get several
 - **Confidence you can tune**: Two thresholds decide when a label is applied; set them from your own mail
-- **Gateway Friendly**: Point `LLM_BASE_URL` at a [LiteLLM](https://docs.litellm.ai/) proxy for spend tracking and virtual keys
 - **Gmail Integration**: Reads and labels emails through the Gmail API
 - **Fully Customizable**: Labels and their descriptions live in a JSON config file
 - **Continuous Operation**: Runs as a persistent service with configurable polling intervals
@@ -44,29 +43,7 @@ Jev never sees label *names*, only the descriptions, so every label needs one. T
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-That is all. The model defaults to `typesafe/jev-1.13` and requests go to OpenRouter's decisions endpoint (`https://openrouter.ai/api/alpha/decisions`).
-
-### Using a LiteLLM Gateway
-
-To route through a LiteLLM proxy instead (spend tracking in one place, virtual keys), set `LLM_BASE_URL` exactly as you would for a chat model:
-
-```bash
-# .env
-LLM_BASE_URL=http://litellm.lan:4000/v1
-OPENROUTER_API_KEY=sk-your-litellm-virtual-key
-```
-
-How it works:
-
-- **The decisions URL is derived from `LLM_BASE_URL`.** `http://litellm.lan:4000/v1` becomes `http://litellm.lan:4000/openrouter/alpha/decisions`, LiteLLM's built-in OpenRouter pass-through route. It maps `/openrouter/<path>` to `https://openrouter.ai/api/<path>`, injects the proxy's `OPENROUTER_API_KEY`, and prices the call for the spend table. No `model_list` entry is needed.
-- **LiteLLM v1.104.0 or newer is required.** Older proxies answer 404 on that route; `verify_setup.py` prints a hint when that happens.
-- **The `model` in the request is the bare OpenRouter id** (`typesafe/jev-1.13`), not `openrouter/typesafe/jev-1.13`.
-- **Guardrails do not run on this route.** The pass-through carries no prompt-injection or PII guard; see [Security Considerations](#security-considerations) for why none is needed.
-- **Per-key model allow-lists are not enforced** on the built-in pass-through; any virtual key on the proxy can reach any OpenRouter model through it.
-- **Docker networking.** Inside a container, `localhost` is the container itself. If LiteLLM runs on the Docker host, use `http://host.docker.internal:4000/v1`; if it runs in another Compose service, use that service name; otherwise use the host's LAN IP or DNS name.
-- **`JEV_DECISIONS_URL` overrides the derivation** when you need a URL that does not follow either pattern.
-
-The startup banner logs `Decisions URL: ...` so you can confirm which endpoint is in use. `uv run python verify_setup.py` sends one tiny decision (about $0.00002) to prove the route, key, and model work end to end.
+That is all. The model defaults to `typesafe/jev-1.13` and requests go to OpenRouter's decisions endpoint (`https://openrouter.ai/api/alpha/decisions`). The startup banner logs the endpoint and model, and `uv run python verify_setup.py` sends one tiny decision (about $0.00002) to prove the key and model work end to end.
 
 ### Model and Thresholds
 
@@ -79,7 +56,7 @@ JEV_TIMEOUT_SECONDS=30
 JEV_REVIEW_LABEL=
 ```
 
-- `JEV_MODEL`: pinned to a specific Jev version on purpose. `~typesafe/jev-latest` is a moving alias and decision behaviour can shift between versions, so bump deliberately and re-check with `scripts/eval_jev.py`.
+- `JEV_MODEL`: pinned to a specific Jev version on purpose. `~typesafe/jev-latest` is a moving alias and decision behaviour can shift between versions, so bump deliberately and watch the results for a few days.
 - `JEV_LABEL_THRESHOLD` / `JEV_FALLBACK_CONFIDENCE`: see [How labels are chosen](#how-labels-are-chosen).
 - `JEV_TIMEOUT_SECONDS`: per request. Timeouts, connection errors, 429 and 5xx are retried once.
 - `JEV_REVIEW_LABEL`: optional Gmail label for emails that clear neither threshold, so they stay visible in the inbox instead of being silently marked processed. Empty (the default) applies no label.
@@ -99,21 +76,9 @@ The agent then applies, in order:
 
 Labels are always validated against `classifier_config.json`; nothing outside that set can be applied.
 
-**Picking thresholds from your own mail.** Two scripts in `scripts/` help:
+**Tuning thresholds.** Run with `--log-level DEBUG` for a while: every classification logs the per-label probabilities and the best-choice confidence, which shows where your mail actually lands. Raise `JEV_LABEL_THRESHOLD` if emails collect labels they should not; lower it (or lower `JEV_FALLBACK_CONFIDENCE`) if too many end up unlabeled.
 
-```bash
-# 1. Dump ~50 recent messages (real mail, written to the gitignored data/ dir)
-uv run python scripts/dump_sample.py --out data/jev_sample.jsonl --max 50
-
-# 2. Open data/jev_sample.jsonl and correct "expected_labels" on each row by hand
-
-# 3. Score every threshold from 0.5 to 0.9 (raw answers are cached beside the sample)
-uv run python scripts/eval_jev.py data/jev_sample.jsonl
-```
-
-The eval prints precision/recall per threshold, a per-label breakdown, and a histogram of Noul probabilities for expected-true versus expected-false labels. Put the winners in `.env`.
-
-**Dry run.** `DRY_RUN=true` classifies every unread email and logs the labels it *would* apply, but creates no labels, modifies no messages, and never writes the state file. Run it next to your current setup for a few days before cutting over.
+**Dry run.** `DRY_RUN=true` classifies every unread email and logs the labels it *would* apply, but creates no labels, modifies no messages, and never writes the state file. Useful when changing labels, descriptions, or thresholds.
 
 ## Prerequisites
 
@@ -169,10 +134,8 @@ Then edit `classifier_config.json` to customize your labels and their descriptio
 5. Edit `.env` with your credentials:
 
 ```bash
-# OPENROUTER_API_KEY is sent as the bearer token to the decisions endpoint
+# OpenRouter API key
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-# Optional: route through a LiteLLM gateway (v1.104.0+) instead of OpenRouter
-# LLM_BASE_URL=http://litellm.lan:4000/v1
 
 # Gmail API Configuration
 GMAIL_CREDENTIALS_PATH=credentials.json
@@ -309,7 +272,7 @@ Edit `classifier_config.json` to customize your email categories (see [Customizi
 - Keep label names concise (1-2 words)
 - Write each description as the list of things that belong under the label, not as an instruction. Jev reads the descriptions as criteria, not as a prompt
 - Make descriptions mutually distinguishable; two overlapping descriptions produce two confident Nouls and the email gets both labels
-- Test with `scripts/eval_jev.py` on a hand-labeled sample before running on your entire inbox
+- Try changes with `DRY_RUN=true` and `--log-level DEBUG` before letting them touch your inbox
 
 ### Adjusting Poll Interval
 
@@ -347,7 +310,6 @@ Emails that receive no label (and the optional review label) are never archived.
 - **`llm_utils.py`**: URL normalization and HTML-to-text reduction
 - **`state_store.py`**: State file persistence
 - **`config.py`**: Configuration and environment variables
-- **`scripts/`**: Offline sample dump and threshold evaluation
 
 ### Workflow
 
@@ -380,7 +342,6 @@ At `DEBUG`, each classification also logs the raw answers (per-label probabiliti
 
 - Never commit `credentials.json`, `token.json`, or `.env` to version control
 - Store your API key (`OPENROUTER_API_KEY`) securely
-- If `LLM_BASE_URL` points at a plain-`http` gateway, keep it on a trusted network - email content travels over that link
 - Use environment variables or secrets management for production deployments
 - Regularly rotate API keys
 - Review Gmail API OAuth scopes to ensure minimum necessary permissions
@@ -446,23 +407,13 @@ Check that:
 3. `JEV_MODEL` names a Jev model (it is not listed by `GET /api/v1/models`, which only covers text models)
 4. Your internet connection is working
 
-### "Error classifying email via <your-gateway-host>"
-
-You are using `LLM_BASE_URL`. Check that:
-1. The gateway is reachable from where the classifier runs (from Docker, `localhost` is the container - see [gateway notes](#using-a-litellm-gateway))
-2. `OPENROUTER_API_KEY` holds a key the gateway accepts (e.g. a LiteLLM virtual key)
-3. The gateway is LiteLLM v1.104.0 or newer: an `HTTP 404` on `/openrouter/alpha/decisions` means it is older
-4. The gateway has its own `OPENROUTER_API_KEY` set; the pass-through injects it upstream
-
-`uv run python verify_setup.py` checks reachability, the key and the route in one step.
-
 ### Timeouts
 
 OpenRouter's decisions endpoint is marked alpha and occasionally hangs. The agent waits `JEV_TIMEOUT_SECONDS` and retries once. If timeouts are frequent, raise the timeout or lower `MAX_EMAILS_PER_POLL`.
 
 ## Pricing
 
-Jev on OpenRouter is priced per input token with free output: about $0.042 per million input tokens at the time of writing, which works out to roughly $0.00007 per email. The cost of every request is logged at `DEBUG` and tracked by OpenRouter's [activity page](https://openrouter.ai/activity) or LiteLLM's spend table when routed through a gateway.
+Jev on OpenRouter is priced per input token with free output: about $0.042 per million input tokens at the time of writing, which works out to roughly $0.00007 per email. The cost of every request is logged at `DEBUG` and tracked on OpenRouter's [activity page](https://openrouter.ai/activity). A dedicated key with a spend limit keeps the classifier's usage separate.
 
 ## License
 

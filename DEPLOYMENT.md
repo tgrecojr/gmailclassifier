@@ -127,25 +127,6 @@ If you need to generate the token directly on the server:
 
 **Important:** The `./data` volume is required to persist the email state file (`.email_state.json`) across container restarts. Without it, the agent would reprocess all unread emails after each restart.
 
-### Routing through a local LiteLLM gateway from Docker
-
-If you set `LLM_BASE_URL` to a gateway running outside the container, remember that `localhost` inside the container is the container itself:
-
-```bash
-# LiteLLM running on the Docker host
-LLM_BASE_URL=http://host.docker.internal:4000/v1
-
-# LiteLLM running as another service in the same docker-compose network
-LLM_BASE_URL=http://litellm:4000/v1
-
-# LiteLLM elsewhere on the LAN
-LLM_BASE_URL=http://192.168.1.50:4000/v1
-```
-
-On Linux, `host.docker.internal` requires `extra_hosts: ["host.docker.internal:host-gateway"]` on the service in `docker-compose.yml`. `OPENROUTER_API_KEY` must hold a key the gateway accepts (e.g. a LiteLLM virtual key).
-
-The classifier does not use the gateway's chat route. It derives `<LLM_BASE_URL without /v1>/openrouter/alpha/decisions`, LiteLLM's built-in OpenRouter pass-through, which needs **LiteLLM v1.104.0 or newer** and the proxy's own `OPENROUTER_API_KEY`. No `model_list` entry is required, and guardrails configured on the chat route do not apply. See the README's gateway section for details.
-
 ---
 
 ## AWS ECS Deployment
@@ -190,7 +171,7 @@ aws secretsmanager create-secret \
   --name gmail-classifier/config \
   --secret-string file://classifier_config.json
 
-# Store the LLM API key (OpenRouter key, or a gateway key if using LLM_BASE_URL)
+# Store the OpenRouter API key
 aws secretsmanager create-secret \
   --name gmail-classifier/llm \
   --secret-string '{"OPENROUTER_API_KEY":"sk-or-v1-xxx"}'
@@ -313,7 +294,7 @@ kubectl create secret generic gmail-credentials \
   --from-file=classifier_config.json \
   -n gmail-classifier
 
-# Create secret for the LLM API key (OpenRouter key, or a gateway key if using LLM_BASE_URL)
+# Create secret for the OpenRouter API key
 kubectl create secret generic gmail-env \
   --from-literal=OPENROUTER_API_KEY=your_key \
   -n gmail-classifier
@@ -351,9 +332,6 @@ spec:
           value: "0.7"
         - name: JEV_FALLBACK_CONFIDENCE
           value: "0.5"
-        # Optional: route through an in-cluster LiteLLM gateway (v1.104.0+) instead of OpenRouter
-        # - name: LLM_BASE_URL
-        #   value: "http://litellm.litellm.svc.cluster.local:4000/v1"
         - name: OPENROUTER_API_KEY
           valueFrom:
             secretKeyRef:
@@ -459,10 +437,10 @@ sudo journalctl -u gmail-classifier -f
 
 3. **Limit permissions**
    - Use minimum required Gmail API scopes
-   - When using a LiteLLM gateway, issue the classifier its own virtual key with a spend limit. Note that the built-in `/openrouter/*` pass-through does not enforce per-key model allow-lists
+   - Give the classifier its own OpenRouter key with a spend limit
 
 4. **Monitor costs**
-   - Set a credit limit / usage alerts in the [OpenRouter dashboard](https://openrouter.ai/activity), or budgets on your gateway's virtual key
+   - Set a credit limit / usage alerts in the [OpenRouter dashboard](https://openrouter.ai/activity)
    - Monitor API usage in Google Cloud Console
 
 5. **Use read-only mounts**
@@ -472,7 +450,6 @@ sudo journalctl -u gmail-classifier -f
 6. **Network security**
    - Run containers in private subnets
    - Use security groups to restrict outbound traffic
-   - If `LLM_BASE_URL` is plain `http`, keep the gateway on a trusted network - email content travels over that link
 
 ---
 
@@ -482,7 +459,7 @@ sudo journalctl -u gmail-classifier -f
 
 Regenerate the token using headless mode or locally, then copy it to your deployment.
 
-### Rate-limit (429) errors from OpenRouter or the gateway
+### Rate-limit (429) errors from OpenRouter
 
 Increase the poll interval or reduce the batch size:
 ```bash
@@ -504,8 +481,6 @@ Common issues:
 - Invalid or missing `OPENROUTER_API_KEY`
 - Expired Gmail token
 - `classifier_config.json` missing a `label_descriptions` entry for one of its labels (the agent refuses to start)
-- Gateway older than LiteLLM v1.104.0 (`HTTP 404` on `/openrouter/alpha/decisions`)
-- `LLM_BASE_URL` unreachable from inside the container (see Docker networking note above)
 
 ---
 
@@ -524,7 +499,7 @@ Consider adding metrics export:
 - Emails processed
 - Classification latency
 - API errors
-- LLM spend (OpenRouter activity page, or LiteLLM's built-in spend tracking when using a gateway)
+- Spend (OpenRouter activity page)
 
 ---
 

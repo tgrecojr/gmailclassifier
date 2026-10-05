@@ -61,7 +61,6 @@ omit = [
     "main.py",
     "setup_token.py",
     "verify_setup.py",
-    "scripts/*",
 ]
 
 [tool.coverage.report]
