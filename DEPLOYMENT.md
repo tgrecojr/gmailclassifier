@@ -142,7 +142,9 @@ LLM_BASE_URL=http://litellm:4000/v1
 LLM_BASE_URL=http://192.168.1.50:4000/v1
 ```
 
-On Linux, `host.docker.internal` requires `extra_hosts: ["host.docker.internal:host-gateway"]` on the service in `docker-compose.yml`. `OPENROUTER_API_KEY` must hold a key the gateway accepts (e.g. a LiteLLM virtual key). See the README's gateway section for model-naming details.
+On Linux, `host.docker.internal` requires `extra_hosts: ["host.docker.internal:host-gateway"]` on the service in `docker-compose.yml`. `OPENROUTER_API_KEY` must hold a key the gateway accepts (e.g. a LiteLLM virtual key).
+
+The classifier does not use the gateway's chat route. It derives `<LLM_BASE_URL without /v1>/openrouter/alpha/decisions`, LiteLLM's built-in OpenRouter pass-through, which needs **LiteLLM v1.104.0 or newer** and the proxy's own `OPENROUTER_API_KEY`. No `model_list` entry is required, and guardrails configured on the chat route do not apply. See the README's gateway section for details.
 
 ---
 
@@ -228,7 +230,8 @@ Create `ecs-task-definition.json`:
       "environment": [
         {"name": "GMAIL_HEADLESS_MODE", "value": "true"},
         {"name": "POLL_INTERVAL_SECONDS", "value": "60"},
-        {"name": "OPENROUTER_MODEL", "value": "anthropic/claude-3.5-sonnet"}
+        {"name": "JEV_LABEL_THRESHOLD", "value": "0.7"},
+        {"name": "JEV_FALLBACK_CONFIDENCE", "value": "0.5"}
       ],
       "secrets": [
         {
@@ -344,9 +347,11 @@ spec:
           value: "true"
         - name: POLL_INTERVAL_SECONDS
           value: "60"
-        - name: OPENROUTER_MODEL
-          value: "anthropic/claude-3.5-sonnet"
-        # Optional: route through an in-cluster LiteLLM gateway instead of OpenRouter
+        - name: JEV_LABEL_THRESHOLD
+          value: "0.7"
+        - name: JEV_FALLBACK_CONFIDENCE
+          value: "0.5"
+        # Optional: route through an in-cluster LiteLLM gateway (v1.104.0+) instead of OpenRouter
         # - name: LLM_BASE_URL
         #   value: "http://litellm.litellm.svc.cluster.local:4000/v1"
         - name: OPENROUTER_API_KEY
@@ -454,7 +459,7 @@ sudo journalctl -u gmail-classifier -f
 
 3. **Limit permissions**
    - Use minimum required Gmail API scopes
-   - When using a LiteLLM gateway, issue the classifier its own virtual key with a spend limit and only the models it needs
+   - When using a LiteLLM gateway, issue the classifier its own virtual key with a spend limit. Note that the built-in `/openrouter/*` pass-through does not enforce per-key model allow-lists
 
 4. **Monitor costs**
    - Set a credit limit / usage alerts in the [OpenRouter dashboard](https://openrouter.ai/activity), or budgets on your gateway's virtual key
@@ -498,7 +503,8 @@ Common issues:
 - Missing credentials
 - Invalid or missing `OPENROUTER_API_KEY`
 - Expired Gmail token
-- Model name not recognized by OpenRouter / the gateway
+- `classifier_config.json` missing a `label_descriptions` entry for one of its labels (the agent refuses to start)
+- Gateway older than LiteLLM v1.104.0 (`HTTP 404` on `/openrouter/alpha/decisions`)
 - `LLM_BASE_URL` unreachable from inside the container (see Docker networking note above)
 
 ---

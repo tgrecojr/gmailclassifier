@@ -34,7 +34,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
     GMAIL_TOKEN_PATH=/app/token.json \
     GMAIL_HEADLESS_MODE=true \
     CLASSIFIER_CONFIG_PATH=/app/classifier_config.json \
-    MODEL_CONFIG_PATH=/app/model_config.json \
     STATE_FILE=/app/data/.email_state.json
 
 ENTRYPOINT []

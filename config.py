@@ -3,9 +3,14 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openrouter_classifier import OPENROUTER_BASE_URL
+
+from jev_classifier import DEFAULT_MODEL, decisions_url_for, validate_labels
 
 load_dotenv()
+
+# OpenAI-compatible base URL used when LLM_BASE_URL is unset. The Jev decisions
+# endpoint is derived from it (see jev_classifier.decisions_url_for).
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def load_classifier_config(config_path: str) -> dict:
@@ -16,7 +21,7 @@ def load_classifier_config(config_path: str) -> dict:
         config_path: Path to the classifier configuration JSON file
 
     Returns:
-        Dictionary containing 'labels' and 'classification_prompt'
+        Dictionary containing 'labels' and 'label_descriptions'
 
     Raises:
         FileNotFoundError: If config file doesn't exist
@@ -33,118 +38,75 @@ def load_classifier_config(config_path: str) -> dict:
     try:
         with open(path, encoding="utf-8") as f:
             config = json.load(f)
-
-        # Validate required fields
-        if "labels" not in config:
-            raise ValueError("Config file must contain 'labels' field")
-        if "classification_prompt" not in config:
-            raise ValueError("Config file must contain 'classification_prompt' field")
-        if not isinstance(config["labels"], list):
-            raise ValueError("'labels' must be a list")
-        if not isinstance(config["classification_prompt"], str):
-            raise ValueError("'classification_prompt' must be a string")
-        if len(config["labels"]) == 0:
-            raise ValueError("'labels' must contain at least one label")
-
-        return config
-
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON in config file: {e}")
 
-
-def load_model_config(config_path: str) -> dict:
-    """
-    Load model configuration from JSON file.
-
-    Args:
-        config_path: Path to the model configuration JSON file
-
-    Returns:
-        Dictionary containing 'model', 'temperature', and 'max_tokens'
-
-    Raises:
-        FileNotFoundError: If config file doesn't exist
-        ValueError: If config file is invalid
-    """
-    path = Path(config_path)
-
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Model config file not found: {config_path}\n"
-            f"Please create it or copy from model_config.example.json"
+    if "labels" not in config:
+        raise ValueError("Config file must contain 'labels' field")
+    if not isinstance(config["labels"], list) or not all(
+        isinstance(label, str) and label.strip() for label in config["labels"]
+    ):
+        raise ValueError("'labels' must be a list of non-empty strings")
+    if "label_descriptions" not in config:
+        raise ValueError(
+            "Config file must contain 'label_descriptions' field: one sentence per "
+            "label describing what belongs under it (Jev never sees label names, "
+            "only these descriptions)"
         )
+    descriptions = config["label_descriptions"]
+    if not isinstance(descriptions, dict) or not all(
+        isinstance(text, str) for text in descriptions.values()
+    ):
+        raise ValueError("'label_descriptions' must map each label to a string")
+    validate_labels(config["labels"], descriptions)
+    return config
 
-    try:
-        with open(path, encoding="utf-8") as f:
-            config = json.load(f)
 
-        # Validate required fields
-        if "model" not in config:
-            raise ValueError("Config file must contain 'model' field")
-        if "temperature" not in config:
-            raise ValueError("Config file must contain 'temperature' field")
-        if "max_tokens" not in config:
-            raise ValueError("Config file must contain 'max_tokens' field")
-        if not isinstance(config["model"], str):
-            raise ValueError("'model' must be a string")
-        if not isinstance(config["temperature"], (int, float)):
-            raise ValueError("'temperature' must be a number")
-        if not isinstance(config["max_tokens"], int):
-            raise ValueError("'max_tokens' must be an integer")
-        if config["temperature"] < 0 or config["temperature"] > 2:
-            raise ValueError("'temperature' must be between 0 and 2")
-        if config["max_tokens"] <= 0:
-            raise ValueError("'max_tokens' must be greater than 0")
-
-        return config
-
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON in config file: {e}")
+def _float_env(name: str, default: float, low: float, high: float) -> float:
+    value = float(os.getenv(name, str(default)))
+    if not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, got {value}")
+    return value
 
 
 # Classifier Configuration
 CLASSIFIER_CONFIG_PATH = os.getenv("CLASSIFIER_CONFIG_PATH", "classifier_config.json")
 
-# Load labels and classification prompt from config file
 try:
     _classifier_config = load_classifier_config(CLASSIFIER_CONFIG_PATH)
     LABELS = _classifier_config["labels"]
-    CLASSIFICATION_PROMPT = _classifier_config["classification_prompt"]
+    LABEL_DESCRIPTIONS = _classifier_config["label_descriptions"]
 except (FileNotFoundError, ValueError) as e:
     print(f"Error loading classifier config: {e}")
     print("Please ensure classifier_config.json exists and is properly formatted.")
     raise
 
 # LLM API Configuration
-# OPENROUTER_API_KEY is sent as the bearer token to whichever endpoint is
-# configured below (OpenRouter by default, or a LiteLLM/OpenAI-compatible gateway).
+# OPENROUTER_API_KEY is sent as the bearer token to the decisions endpoint
+# (an OpenRouter key, or a LiteLLM virtual key when routed through the gateway).
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# Optional override for the OpenAI-compatible API base URL (e.g. a LiteLLM proxy).
-# Empty/whitespace values are treated as unset so the OpenRouter default applies.
+# Optional OpenAI-compatible base URL (e.g. a LiteLLM proxy). Empty/whitespace
+# values are treated as unset so the OpenRouter default applies.
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "").strip() or OPENROUTER_BASE_URL
 
-# Model Configuration - Load from file if available, otherwise from env vars
-MODEL_CONFIG_PATH = os.getenv("MODEL_CONFIG_PATH")
-
-if MODEL_CONFIG_PATH:
-    try:
-        _model_config = load_model_config(MODEL_CONFIG_PATH)
-        OPENROUTER_MODEL = _model_config["model"]
-        OPENROUTER_TEMPERATURE = _model_config["temperature"]
-        OPENROUTER_MAX_TOKENS = _model_config["max_tokens"]
-        print(f"Loaded model configuration from {MODEL_CONFIG_PATH}")
-    except (FileNotFoundError, ValueError) as e:
-        print(f"Error loading model config: {e}")
-        print("Falling back to environment variables.")
-        OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet")
-        OPENROUTER_TEMPERATURE = float(os.getenv("OPENROUTER_TEMPERATURE", "0.0"))
-        OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "1000"))
-else:
-    # Fallback to environment variables
-    OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet")
-    OPENROUTER_TEMPERATURE = float(os.getenv("OPENROUTER_TEMPERATURE", "0.0"))
-    OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "1000"))
+# Jev (TypeSafe decisions model) Configuration
+# JEV_DECISIONS_URL is derived from LLM_BASE_URL unless set explicitly:
+#   https://openrouter.ai/api/v1 -> https://openrouter.ai/api/alpha/decisions
+#   http://litellm:4000/v1       -> http://litellm:4000/openrouter/alpha/decisions
+JEV_MODEL = os.getenv("JEV_MODEL", "").strip() or DEFAULT_MODEL
+JEV_DECISIONS_URL = os.getenv("JEV_DECISIONS_URL", "").strip() or decisions_url_for(
+    LLM_BASE_URL
+)
+# A label is applied when its yes/no probability reaches JEV_LABEL_THRESHOLD.
+# If none does, the single best label is applied when the model's confidence
+# in that choice reaches JEV_FALLBACK_CONFIDENCE (and the choice is not "None").
+JEV_LABEL_THRESHOLD = _float_env("JEV_LABEL_THRESHOLD", 0.7, 0.0, 1.0)
+JEV_FALLBACK_CONFIDENCE = _float_env("JEV_FALLBACK_CONFIDENCE", 0.5, 0.0, 1.0)
+JEV_TIMEOUT_SECONDS = _float_env("JEV_TIMEOUT_SECONDS", 30.0, 1.0, 600.0)
+# Optional Gmail label for emails that clear neither threshold, so they stay
+# visible instead of being silently marked processed. Empty = no label.
+JEV_REVIEW_LABEL = os.getenv("JEV_REVIEW_LABEL", "").strip()
 
 # Gmail Configuration
 GMAIL_CREDENTIALS_PATH = os.getenv("GMAIL_CREDENTIALS_PATH", "credentials.json")
@@ -159,15 +121,6 @@ MAX_EMAILS_PER_POLL = int(os.getenv("MAX_EMAILS_PER_POLL", "10"))
 STATE_FILE = os.getenv("STATE_FILE", ".email_state.json")
 STATE_RETENTION_DAYS = int(os.getenv("STATE_RETENTION_DAYS", "30"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-
-# Policy for emails the LLM endpoint rejects with HTTP 400 (a gateway
-# guardrail block). A block is deterministic for a given email, so by default
-# there is no retry: the email gets REJECTED_LABEL (left in the inbox, not
-# archived) and is marked processed — the block becomes a visible signal
-# instead of a silent gap. Set REJECTED_LABEL empty to skip the label.
-# REJECTED_MAX_ATTEMPTS > 1 re-enables backed-off retries (30m, 1h, 2h ...)
-# for the case where the guard is being retuned; the label is applied only
-# when the last attempt is also rejected.
-REJECTED_LABEL = os.getenv("REJECTED_LABEL", "Flagged").strip()
-REJECTED_MAX_ATTEMPTS = int(os.getenv("REJECTED_MAX_ATTEMPTS", "1"))
-REJECTED_RETRY_BASE_MINUTES = int(os.getenv("REJECTED_RETRY_BASE_MINUTES", "30"))
+# DRY_RUN=true classifies and logs the labels it would apply, but never
+# creates labels, modifies messages, or writes the state file.
+DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
