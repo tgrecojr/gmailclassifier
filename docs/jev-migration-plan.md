@@ -96,10 +96,11 @@ What this means for llmprotect:
   collects guardrails when a pass-through entry explicitly lists them, and the
   built-in provider routes list none, so `default_on: true` has no effect
   here. The chat route keeps its full guardrail chain for other apps.
-- Known caveat: the built-in route ignores per-key `models` allow-lists, so
-  any virtual key on this proxy can reach any OpenRouter model via
-  `/openrouter/*`. Acceptable for a single-user homelab; noted so it is not a
-  surprise in the spend table.
+- Correction (observed 2026-10-05 on v1.104.0): per-key `models` allow-lists
+  **are** enforced on this route. LiteLLM's auth layer reads `model` from the
+  JSON body and answers `403 key_model_access_denied` unless the key lists the
+  bare id `typesafe/jev-1.13` or is unrestricted. The app's virtual key needs
+  that entry added.
 
 Request:
 

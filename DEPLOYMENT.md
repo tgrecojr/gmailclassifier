@@ -459,7 +459,7 @@ sudo journalctl -u gmail-classifier -f
 
 3. **Limit permissions**
    - Use minimum required Gmail API scopes
-   - When using a LiteLLM gateway, issue the classifier its own virtual key with a spend limit. Note that the built-in `/openrouter/*` pass-through does not enforce per-key model allow-lists
+   - When using a LiteLLM gateway, issue the classifier its own virtual key with a spend limit and `typesafe/jev-1.13` in its `models` list (the bare OpenRouter id; the pass-through route is checked against it)
 
 4. **Monitor costs**
    - Set a credit limit / usage alerts in the [OpenRouter dashboard](https://openrouter.ai/activity), or budgets on your gateway's virtual key
@@ -505,6 +505,7 @@ Common issues:
 - Expired Gmail token
 - `classifier_config.json` missing a `label_descriptions` entry for one of its labels (the agent refuses to start)
 - Gateway older than LiteLLM v1.104.0 (`HTTP 404` on `/openrouter/alpha/decisions`)
+- Virtual key not allowed to call `typesafe/jev-1.13` (`HTTP 403 key_model_access_denied`)
 - `LLM_BASE_URL` unreachable from inside the container (see Docker networking note above)
 
 ---

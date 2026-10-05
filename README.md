@@ -62,7 +62,7 @@ How it works:
 - **LiteLLM v1.104.0 or newer is required.** Older proxies answer 404 on that route; `verify_setup.py` prints a hint when that happens.
 - **The `model` in the request is the bare OpenRouter id** (`typesafe/jev-1.13`), not `openrouter/typesafe/jev-1.13`.
 - **Guardrails do not run on this route.** The pass-through carries no prompt-injection or PII guard; see [Security Considerations](#security-considerations) for why none is needed.
-- **Per-key model allow-lists are not enforced** on the built-in pass-through; any virtual key on the proxy can reach any OpenRouter model through it.
+- **The virtual key must be allowed to call `typesafe/jev-1.13`.** LiteLLM's auth layer reads `model` from the request body and checks it against the key's `models` list before the pass-through runs, answering `403 key_model_access_denied` otherwise. Add the bare id `typesafe/jev-1.13` (not `openrouter/typesafe/jev-1.13`) to the key, or leave the key unrestricted.
 - **Docker networking.** Inside a container, `localhost` is the container itself. If LiteLLM runs on the Docker host, use `http://host.docker.internal:4000/v1`; if it runs in another Compose service, use that service name; otherwise use the host's LAN IP or DNS name.
 - **`JEV_DECISIONS_URL` overrides the derivation** when you need a URL that does not follow either pattern.
 
@@ -452,7 +452,8 @@ You are using `LLM_BASE_URL`. Check that:
 1. The gateway is reachable from where the classifier runs (from Docker, `localhost` is the container - see [gateway notes](#using-a-litellm-gateway))
 2. `OPENROUTER_API_KEY` holds a key the gateway accepts (e.g. a LiteLLM virtual key)
 3. The gateway is LiteLLM v1.104.0 or newer: an `HTTP 404` on `/openrouter/alpha/decisions` means it is older
-4. The gateway has its own `OPENROUTER_API_KEY` set; the pass-through injects it upstream
+4. The virtual key may call `typesafe/jev-1.13`: an `HTTP 403` with `key_model_access_denied` means the key's `models` list does not include that bare id
+5. The gateway has its own `OPENROUTER_API_KEY` set; the pass-through injects it upstream
 
 `uv run python verify_setup.py` checks reachability, the key and the route in one step.
 

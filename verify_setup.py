@@ -145,7 +145,12 @@ def check_jev_endpoint() -> bool:
     except JevRequestError as e:
         print(f"{RED}✗{RESET} Decisions endpoint failed: {e}")
         message = str(e)
-        if "HTTP 401" in message or "HTTP 403" in message:
+        if "key_model_access_denied" in message:
+            print(
+                f"{YELLOW}  Hint:{RESET} the LiteLLM virtual key is not allowed to call "
+                f"'{classifier.model}'; add that bare model id to the key's models list"
+            )
+        elif "HTTP 401" in message or "HTTP 403" in message:
             print(f"{YELLOW}  Hint:{RESET} the endpoint rejected OPENROUTER_API_KEY")
         elif "HTTP 404" in message and via_gateway:
             print(
