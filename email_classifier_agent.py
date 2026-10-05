@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import config
 import state_store
 from gmail_client import GmailClient
-from jev_classifier import JevClassifier
+from jev_classifier import OPENROUTER_DECISIONS_URL, JevClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,6 @@ class EmailClassifierAgent:
             labels=config.LABELS,
             label_descriptions=config.LABEL_DESCRIPTIONS,
             model=config.JEV_MODEL,
-            decisions_url=config.JEV_DECISIONS_URL,
             label_threshold=config.JEV_LABEL_THRESHOLD,
             fallback_confidence=config.JEV_FALLBACK_CONFIDENCE,
             timeout_seconds=config.JEV_TIMEOUT_SECONDS,
@@ -49,7 +48,7 @@ class EmailClassifierAgent:
 
         logger.info(
             f"Email Classifier Agent initialized with Jev at "
-            f"{config.JEV_DECISIONS_URL} (model: {config.JEV_MODEL}, "
+            f"{OPENROUTER_DECISIONS_URL} (model: {config.JEV_MODEL}, "
             f"label_threshold: {config.JEV_LABEL_THRESHOLD}, "
             f"fallback_confidence: {config.JEV_FALLBACK_CONFIDENCE}, "
             f"review_label: {config.JEV_REVIEW_LABEL or '<none>'}"

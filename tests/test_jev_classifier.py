@@ -2,7 +2,7 @@
 Unit tests for jev_classifier.py
 
 The HTTP layer is exercised through httpx2.MockTransport so the request body
-LiteLLM/OpenRouter would receive is asserted exactly.
+OpenRouter would receive is asserted exactly.
 """
 
 import json
@@ -21,7 +21,6 @@ from jev_classifier import (
     JevRequestError,
     build_questions,
     build_state,
-    decisions_url_for,
     question_key,
     select_labels,
     validate_labels,
@@ -80,38 +79,11 @@ def _classifier(handler, **overrides):
         api_key="sk-test",
         labels=LABELS,
         label_descriptions=DESCRIPTIONS,
-        decisions_url="http://litellm.test:4000/openrouter/alpha/decisions",
         retry_delay_seconds=0,
         transport=httpx.MockTransport(handler),
     )
     kwargs.update(overrides)
     return JevClassifier(**kwargs)
-
-
-@pytest.mark.unit
-class TestDecisionsUrlFor:
-    @pytest.mark.parametrize(
-        "base,expected",
-        [
-            ("https://openrouter.ai/api/v1", OPENROUTER_DECISIONS_URL),
-            ("https://openrouter.ai/api/v1/", OPENROUTER_DECISIONS_URL),
-            ("https://openrouter.ai/api", OPENROUTER_DECISIONS_URL),
-            (
-                "http://litellm.lan:4000/v1",
-                "http://litellm.lan:4000/openrouter/alpha/decisions",
-            ),
-            (
-                "http://litellm.lan:4000",
-                "http://litellm.lan:4000/openrouter/alpha/decisions",
-            ),
-            (
-                "https://llm.internal.example.com/v1",
-                "https://llm.internal.example.com/openrouter/alpha/decisions",
-            ),
-        ],
-    )
-    def test_derivation(self, base, expected):
-        assert decisions_url_for(base) == expected
 
 
 @pytest.mark.unit
@@ -254,7 +226,7 @@ class TestJevClassifierHttp:
 
         assert len(seen) == 1
         request = seen[0]
-        assert str(request.url) == "http://litellm.test:4000/openrouter/alpha/decisions"
+        assert str(request.url) == OPENROUTER_DECISIONS_URL
         assert request.headers["authorization"] == "Bearer sk-test"
         assert request.headers["x-title"] == "gmailclassifier"
         body = json.loads(request.content)

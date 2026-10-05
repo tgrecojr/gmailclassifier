@@ -4,13 +4,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from jev_classifier import DEFAULT_MODEL, decisions_url_for, validate_labels
+from jev_classifier import DEFAULT_MODEL, validate_labels
 
 load_dotenv()
-
-# OpenAI-compatible base URL used when LLM_BASE_URL is unset. The Jev decisions
-# endpoint is derived from it (see jev_classifier.decisions_url_for).
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def load_classifier_config(config_path: str) -> dict:
@@ -81,23 +77,13 @@ except (FileNotFoundError, ValueError) as e:
     print("Please ensure classifier_config.json exists and is properly formatted.")
     raise
 
-# LLM API Configuration
-# OPENROUTER_API_KEY is sent as the bearer token to the decisions endpoint
-# (an OpenRouter key, or a LiteLLM virtual key when routed through the gateway).
+# OpenRouter API Configuration
+# OPENROUTER_API_KEY is sent as the bearer token to OpenRouter's decisions
+# endpoint (jev_classifier.OPENROUTER_DECISIONS_URL).
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# Optional OpenAI-compatible base URL (e.g. a LiteLLM proxy). Empty/whitespace
-# values are treated as unset so the OpenRouter default applies.
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "").strip() or OPENROUTER_BASE_URL
-
 # Jev (TypeSafe decisions model) Configuration
-# JEV_DECISIONS_URL is derived from LLM_BASE_URL unless set explicitly:
-#   https://openrouter.ai/api/v1 -> https://openrouter.ai/api/alpha/decisions
-#   http://litellm:4000/v1       -> http://litellm:4000/openrouter/alpha/decisions
 JEV_MODEL = os.getenv("JEV_MODEL", "").strip() or DEFAULT_MODEL
-JEV_DECISIONS_URL = os.getenv("JEV_DECISIONS_URL", "").strip() or decisions_url_for(
-    LLM_BASE_URL
-)
 # A label is applied when its yes/no probability reaches JEV_LABEL_THRESHOLD.
 # If none does, the single best label is applied when the model's confidence
 # in that choice reaches JEV_FALLBACK_CONFIDENCE (and the choice is not "None").

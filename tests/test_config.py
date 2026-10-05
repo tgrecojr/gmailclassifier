@@ -87,9 +87,7 @@ def reload_config(monkeypatch):
         # Keep config.load_dotenv() from re-reading a real .env during reload
         monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: False)
         for key in (
-            "LLM_BASE_URL",
             "JEV_MODEL",
-            "JEV_DECISIONS_URL",
             "JEV_LABEL_THRESHOLD",
             "JEV_FALLBACK_CONFIDENCE",
             "JEV_TIMEOUT_SECONDS",
@@ -108,45 +106,12 @@ def reload_config(monkeypatch):
 
 
 @pytest.mark.unit
-class TestLLMBaseURL:
-    """Tests for LLM_BASE_URL resolution in config.py."""
-
-    OPENROUTER = "https://openrouter.ai/api/v1"
-
-    def test_defaults_to_openrouter_when_unset(self, reload_config):
-        config = reload_config()
-        assert config.LLM_BASE_URL == self.OPENROUTER
-
-    def test_uses_custom_url_when_set(self, reload_config):
-        config = reload_config(LLM_BASE_URL="http://litellm:4000/v1")
-        assert config.LLM_BASE_URL == "http://litellm:4000/v1"
-
-    def test_strips_surrounding_whitespace(self, reload_config):
-        config = reload_config(LLM_BASE_URL="  http://litellm:4000/v1 ")
-        assert config.LLM_BASE_URL == "http://litellm:4000/v1"
-
-    @pytest.mark.parametrize("empty_value", ["", "   "])
-    def test_empty_value_falls_back_to_openrouter(self, reload_config, empty_value):
-        config = reload_config(LLM_BASE_URL=empty_value)
-        assert config.LLM_BASE_URL == self.OPENROUTER
-
-    def test_api_key_still_read_from_openrouter_var(self, reload_config):
-        """OPENROUTER_API_KEY is the bearer token regardless of base URL."""
-        config = reload_config(
-            LLM_BASE_URL="http://litellm:4000/v1",
-            OPENROUTER_API_KEY="sk-litellm-virtual-key",
-        )
-        assert config.OPENROUTER_API_KEY == "sk-litellm-virtual-key"
-
-
-@pytest.mark.unit
 class TestJevSettings:
-    """Jev endpoint, model, thresholds and dry-run flags."""
+    """Jev model, thresholds and dry-run flags."""
 
     def test_defaults(self, reload_config):
         config = reload_config()
         assert config.JEV_MODEL == "typesafe/jev-1.13"
-        assert config.JEV_DECISIONS_URL == "https://openrouter.ai/api/alpha/decisions"
         assert config.JEV_LABEL_THRESHOLD == 0.7
         assert config.JEV_FALLBACK_CONFIDENCE == 0.5
         assert config.JEV_TIMEOUT_SECONDS == 30.0
@@ -155,19 +120,9 @@ class TestJevSettings:
         assert config.LABELS == ["AWS", "Finance", "Work", "Personal"]
         assert set(config.LABEL_DESCRIPTIONS) == set(config.LABELS)
 
-    def test_decisions_url_derived_from_gateway_base_url(self, reload_config):
-        config = reload_config(LLM_BASE_URL="http://litellm.lan:4000/v1")
-        assert (
-            config.JEV_DECISIONS_URL
-            == "http://litellm.lan:4000/openrouter/alpha/decisions"
-        )
-
-    def test_explicit_decisions_url_wins(self, reload_config):
-        config = reload_config(
-            LLM_BASE_URL="http://litellm.lan:4000/v1",
-            JEV_DECISIONS_URL=" https://openrouter.ai/api/alpha/decisions ",
-        )
-        assert config.JEV_DECISIONS_URL == "https://openrouter.ai/api/alpha/decisions"
+    def test_api_key_is_read(self, reload_config):
+        config = reload_config(OPENROUTER_API_KEY="sk-or-v1-test")
+        assert config.OPENROUTER_API_KEY == "sk-or-v1-test"
 
     def test_overrides(self, reload_config):
         config = reload_config(
