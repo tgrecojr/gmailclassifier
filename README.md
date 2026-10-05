@@ -1,133 +1,119 @@
 # Gmail Email Classifier Agent
 
-An intelligent email classification system that automatically reads, categorizes, and labels Gmail emails using AI-powered classification.
+An email classification system that automatically reads, categorizes, and labels Gmail emails using [Jev](https://openrouter.ai/blog/insights/what-is-jev/), TypeSafe's non-generative decision model, via OpenRouter.
 
 ## Features
 
 - **Automatic Email Processing**: Continuously monitors your Gmail inbox for unread emails
-- **AI-Powered Classification**: Uses OpenRouter API for access to multiple AI models (Claude, GPT-4, and more)
-- **Gateway Friendly**: Point `LLM_BASE_URL` at any OpenAI-compatible endpoint (e.g. a local [LiteLLM](https://docs.litellm.ai/) proxy) to add sanitization, prompt-injection screening, or routing in front of the model
-- **Multi-Label Support**: Emails can be assigned multiple labels simultaneously
-- **Gmail Integration**: Seamlessly integrates with Gmail API for reading and labeling emails
-- **Fully Customizable**: Configure your own label categories and classification rules via JSON config file
+- **Decision model, not a chatbot**: Jev answers typed yes/no questions with probabilities. It emits no text, follows no instructions, and cannot pick a label outside the set you configure
+- **Multi-Label Support**: Every label is scored independently, so an email can get several
+- **Confidence you can tune**: Two thresholds decide when a label is applied; set them from your own mail
+- **Gateway Friendly**: Point `LLM_BASE_URL` at a [LiteLLM](https://docs.litellm.ai/) proxy for spend tracking and virtual keys
+- **Gmail Integration**: Reads and labels emails through the Gmail API
+- **Fully Customizable**: Labels and their descriptions live in a JSON config file
 - **Continuous Operation**: Runs as a persistent service with configurable polling intervals
 - **State Persistence**: Tracks processed emails to avoid reprocessing after restarts
-- **Model Flexibility**: Choose from dozens of models via OpenRouter (Claude, GPT-4, Llama, and more)
+- **Dry run**: Classify and log without touching Gmail or the state file
+- **Cheap**: Roughly $0.00007 per email at Jev's list price
 
-## Customizing Labels and Classification
+## Customizing Labels
 
-The system uses a JSON configuration file (`classifier_config.json`) to define labels and classification rules. You can easily customize it for your needs!
+The system uses a JSON configuration file (`classifier_config.json`) to define labels and what belongs under each.
 
 **Example configuration** (`classifier_config.example.json`):
 ```json
 {
-  "labels": [
-    "Work",
-    "Personal",
-    "Finance",
-    "Shopping",
-    "Travel",
-    "Social",
-    "Newsletters"
-  ],
-  "classification_prompt": "Your task is to categorize the email according to the following labels.\n\nWork - Work-related emails...\nPersonal - Personal emails from friends...\n..."
+  "labels": ["Work", "Personal", "Finance", "Shopping"],
+  "label_descriptions": {
+    "Work": "Work-related emails, meetings, professional communications, project updates",
+    "Personal": "Personal emails from friends and family, social invitations",
+    "Finance": "Bank statements, credit card bills, investment updates, payment confirmations",
+    "Shopping": "Order confirmations, shipping notifications, promotional emails from retailers"
+  }
 }
 ```
 
-See [Configuration](#configuration) section below for details on customizing your labels.
+Jev never sees label *names*, only the descriptions, so every label needs one. The agent refuses to start if a description is missing, empty, or if a label is called `None` (reserved for "nothing fits"). See [How labels are chosen](#how-labels-are-chosen) below.
 
-## OpenRouter Configuration
-
-This application uses [OpenRouter](https://openrouter.ai/) to provide access to multiple AI models through a single API. OpenRouter offers:
-
-- **Access to 100+ models**: Claude, GPT-4, Llama, Gemini, and more
-- **Unified API**: One API key for all models
-- **Competitive pricing**: Pay only for what you use
-- **No vendor lock-in**: Switch models anytime
+## Jev Configuration
 
 ### Quick Start
 
 ```bash
 # .env
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
 ```
 
-**Popular model options:**
-- `anthropic/claude-3.5-sonnet` - Best for complex classification (default)
-- `anthropic/claude-3-haiku` - Faster and cheaper
-- `openai/gpt-4-turbo` - Alternative high-quality option
-- `meta-llama/llama-3.1-70b-instruct` - Open source option
+That is all. The model defaults to `typesafe/jev-1.13` and requests go to OpenRouter's decisions endpoint (`https://openrouter.ai/api/alpha/decisions`).
 
-See [OpenRouter Models](https://openrouter.ai/docs#models) for the full list of available models.
+### Using a LiteLLM Gateway
 
-### Using a LiteLLM or Other OpenAI-Compatible Gateway
-
-By default the classifier talks directly to OpenRouter. To route requests through a gateway instead (for example a local [LiteLLM](https://docs.litellm.ai/) proxy that adds sanitization, prompt-injection screening, logging, or routing), set `LLM_BASE_URL`:
+To route through a LiteLLM proxy instead (spend tracking in one place, virtual keys), set `LLM_BASE_URL` exactly as you would for a chat model:
 
 ```bash
 # .env
 LLM_BASE_URL=http://litellm.lan:4000/v1
 OPENROUTER_API_KEY=sk-your-litellm-virtual-key
-OPENROUTER_MODEL=openrouter/anthropic/claude-3.5-sonnet   # must match a model name your gateway exposes
 ```
 
 How it works:
 
-- **`LLM_BASE_URL` is optional.** If it is unset or empty, requests go to `https://openrouter.ai/api/v1` exactly as before. Existing deployments need no changes.
-- **`OPENROUTER_API_KEY` is used regardless of provider.** The variable name is kept for backward compatibility; its value is sent as the `Authorization: Bearer` token to whichever endpoint is configured. With LiteLLM, set it to a LiteLLM virtual key (or the master key). The OpenAI client refuses an empty key, so even a gateway with auth disabled needs a non-empty placeholder here.
-- **Model names are resolved by the gateway.** `OPENROUTER_MODEL` / `model_config.json` must name a model the gateway knows. With LiteLLM that is whatever `model_name` you configured in its `model_list` (e.g. `openrouter/anthropic/claude-3.5-sonnet` or an alias you defined) - not necessarily the raw OpenRouter ID.
-- **URL shape.** The client appends `/chat/completions` to `LLM_BASE_URL`. LiteLLM serves both `/v1/chat/completions` and `/chat/completions`, so `http://host:4000` and `http://host:4000/v1` both work; the `/v1` form is recommended for parity with OpenRouter.
+- **The decisions URL is derived from `LLM_BASE_URL`.** `http://litellm.lan:4000/v1` becomes `http://litellm.lan:4000/openrouter/alpha/decisions`, LiteLLM's built-in OpenRouter pass-through route. It maps `/openrouter/<path>` to `https://openrouter.ai/api/<path>`, injects the proxy's `OPENROUTER_API_KEY`, and prices the call for the spend table. No `model_list` entry is needed.
+- **LiteLLM v1.104.0 or newer is required.** Older proxies answer 404 on that route; `verify_setup.py` prints a hint when that happens.
+- **The `model` in the request is the bare OpenRouter id** (`typesafe/jev-1.13`), not `openrouter/typesafe/jev-1.13`.
+- **Guardrails do not run on this route.** The pass-through carries no prompt-injection or PII guard; see [Security Considerations](#security-considerations) for why none is needed.
+- **Per-key model allow-lists are not enforced** on the built-in pass-through; any virtual key on the proxy can reach any OpenRouter model through it.
 - **Docker networking.** Inside a container, `localhost` is the container itself. If LiteLLM runs on the Docker host, use `http://host.docker.internal:4000/v1`; if it runs in another Compose service, use that service name; otherwise use the host's LAN IP or DNS name.
+- **`JEV_DECISIONS_URL` overrides the derivation** when you need a URL that does not follow either pattern.
 
-The startup banner logs `LLM Base URL: ...` so you can confirm which endpoint is in use. `uv run python verify_setup.py` will also probe the configured endpoint with your key.
+The startup banner logs `Decisions URL: ...` so you can confirm which endpoint is in use. `uv run python verify_setup.py` sends one tiny decision (about $0.00002) to prove the route, key, and model work end to end.
 
-### Model Configuration
-
-The application supports two ways to configure the model settings:
-
-**Option 1: Model Configuration File (Recommended for Docker)**
-
-Create a `model_config.json` file to externalize model settings. This is especially useful for Docker deployments where you can mount the config file and change model parameters without recreating the container:
+### Model and Thresholds
 
 ```bash
-cp model_config.example.json model_config.json
+# .env (all optional, defaults shown)
+JEV_MODEL=typesafe/jev-1.13
+JEV_LABEL_THRESHOLD=0.7
+JEV_FALLBACK_CONFIDENCE=0.5
+JEV_TIMEOUT_SECONDS=30
+JEV_REVIEW_LABEL=
 ```
 
-Then edit `model_config.json`:
-```json
-{
-  "model": "anthropic/claude-3.5-sonnet",
-  "temperature": 0.0,
-  "max_tokens": 1000
-}
-```
+- `JEV_MODEL`: pinned to a specific Jev version on purpose. `~typesafe/jev-latest` is a moving alias and decision behaviour can shift between versions, so bump deliberately and re-check with `scripts/eval_jev.py`.
+- `JEV_LABEL_THRESHOLD` / `JEV_FALLBACK_CONFIDENCE`: see [How labels are chosen](#how-labels-are-chosen).
+- `JEV_TIMEOUT_SECONDS`: per request. Timeouts, connection errors, 429 and 5xx are retried once.
+- `JEV_REVIEW_LABEL`: optional Gmail label for emails that clear neither threshold, so they stay visible in the inbox instead of being silently marked processed. Empty (the default) applies no label.
 
-Set the path in your `.env` file:
+## How labels are chosen
+
+Each email is sent once, as a structured object (`from`, `subject`, `date`, `body`), together with one question per label:
+
+- **One Noul per label**: "Does this email belong under *Finance*?" answered with a probability.
+- **One Choice across all labels plus `None`**: "Which single label fits best?" answered with a pick and a confidence.
+
+The agent then applies, in order:
+
+1. Every label whose Noul probability is at or above `JEV_LABEL_THRESHOLD` (default 0.7). This is what gives multi-label results.
+2. If nothing clears step 1, the Choice answer, provided it is not `None` and its confidence is at or above `JEV_FALLBACK_CONFIDENCE` (default 0.5).
+3. Otherwise no label. The email is marked processed, left in the inbox, and labeled `JEV_REVIEW_LABEL` if you set one.
+
+Labels are always validated against `classifier_config.json`; nothing outside that set can be applied.
+
+**Picking thresholds from your own mail.** Two scripts in `scripts/` help:
+
 ```bash
-MODEL_CONFIG_PATH=model_config.json
+# 1. Dump ~50 recent messages (real mail, written to the gitignored data/ dir)
+uv run python scripts/dump_sample.py --out data/jev_sample.jsonl --max 50
+
+# 2. Open data/jev_sample.jsonl and correct "expected_labels" on each row by hand
+
+# 3. Score every threshold from 0.5 to 0.9 (raw answers are cached beside the sample)
+uv run python scripts/eval_jev.py data/jev_sample.jsonl
 ```
 
-**Benefits:**
-- Change model settings without recreating Docker containers (just restart)
-- Easy A/B testing of different models in production
-- Clear separation between secrets (.env) and model config
+The eval prints precision/recall per threshold, a per-label breakdown, and a histogram of Noul probabilities for expected-true versus expected-false labels. Put the winners in `.env`.
 
-**Option 2: Environment Variables (Fallback)**
-
-If `MODEL_CONFIG_PATH` is not set, the application falls back to environment variables:
-
-```bash
-# .env
-OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
-OPENROUTER_TEMPERATURE=0.0
-OPENROUTER_MAX_TOKENS=1000
-```
-
-**Configuration Parameters:**
-- `model`: OpenRouter model ID (see [available models](https://openrouter.ai/docs#models))
-- `temperature`: Sampling temperature (0.0-2.0, lower = more deterministic)
-- `max_tokens`: Maximum tokens in response (typically 1000 is sufficient)
+**Dry run.** `DRY_RUN=true` classifies every unread email and logs the labels it *would* apply, but creates no labels, modifies no messages, and never writes the state file. Run it next to your current setup for a few days before cutting over.
 
 ## Prerequisites
 
@@ -178,24 +164,14 @@ cp .env.example .env
 cp classifier_config.example.json classifier_config.json
 ```
 
-Then edit `classifier_config.json` to customize your labels and classification prompt.
+Then edit `classifier_config.json` to customize your labels and their descriptions.
 
-5. Create your model configuration (optional, but recommended):
-
-```bash
-cp model_config.example.json model_config.json
-```
-
-Then edit `model_config.json` to configure model settings (model, temperature, max_tokens).
-
-6. Edit `.env` with your credentials:
+5. Edit `.env` with your credentials:
 
 ```bash
-# LLM API Configuration
-# OPENROUTER_API_KEY is sent as the bearer token to whichever endpoint is used
+# OPENROUTER_API_KEY is sent as the bearer token to the decisions endpoint
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
-# Optional: route through a LiteLLM / OpenAI-compatible gateway instead of OpenRouter
+# Optional: route through a LiteLLM gateway (v1.104.0+) instead of OpenRouter
 # LLM_BASE_URL=http://litellm.lan:4000/v1
 
 # Gmail API Configuration
@@ -211,7 +187,13 @@ MAX_EMAILS_PER_POLL=10
 LOG_LEVEL=INFO
 ```
 
-7. Place your Gmail `credentials.json` file in the project directory
+6. Place your Gmail `credentials.json` file in the project directory
+
+7. Check everything in one go:
+
+```bash
+uv run python verify_setup.py
+```
 
 ## Usage
 
@@ -258,7 +240,7 @@ uv run python main.py
 
 This will:
 - Check for unread emails every 60 seconds (configurable)
-- Classify each email using OpenRouter
+- Classify each email with Jev
 - Apply appropriate labels to emails in Gmail
 - Maintain state to avoid reprocessing emails across restarts
 - Log all activities to console
@@ -268,7 +250,7 @@ This will:
 Control the verbosity of logging:
 
 ```bash
-uv run python main.py --log-level DEBUG    # Detailed debug information
+uv run python main.py --log-level DEBUG    # Includes per-label probabilities and cost per email
 uv run python main.py --log-level INFO     # General information (default)
 uv run python main.py --log-level WARNING  # Warnings only
 uv run python main.py --log-level ERROR    # Errors only
@@ -276,19 +258,14 @@ uv run python main.py --log-level ERROR    # Errors only
 
 ## State Persistence
 
-The application maintains a state file (`.email_state.json`) to track which emails have been processed. This **prevents duplicate LLM calls** and saves money by ensuring each email is only classified once, even if it remains unread in your inbox.
+The application maintains a state file (`.email_state.json`) to track which emails have been processed. This ensures each email is only classified once, even if it remains unread in your inbox.
 
 ### How It Works
 
 - Before processing an email, the agent checks if the email ID is in the state file
-- If already processed, the email is skipped (no LLM call is made)
-- After successfully processing an email, its ID is saved to the state file
+- If already processed, the email is skipped (no API call is made)
+- After processing an email (labeled or not), its ID is saved to the state file
 - State persists across restarts, so emails are never reprocessed
-
-This is especially important because:
-- Emails may remain unread even after being classified and labeled
-- The agent continuously polls for unread emails
-- Without state tracking, the same emails would be sent to the LLM repeatedly, wasting money
 
 **Local Development:**
 - State file is stored in the project directory
@@ -310,21 +287,7 @@ To prevent the state file from growing indefinitely, the agent automatically rem
 
 **Example**: With `STATE_RETENTION_DAYS=30`, if you receive the same email again after 30 days, it will be reprocessed (useful for recurring notifications).
 
-**Migration**: The state file automatically migrates from the old format (list of IDs) to the new format (dictionary with timestamps) on first load.
-
-### Rejected (Guardrail-Blocked) Emails
-
-When the LLM endpoint answers **HTTP 400** — typically a gateway guardrail (e.g. LiteLLM + llmprotect) blocking the email as a suspected prompt injection — the block is deterministic for that email, so retrying it is pointless. By default the email is given the `Flagged` label, **left in the inbox** (not archived) so you can see it, and marked processed so it is never sent again. The guard's verdict becomes a visible phishing/injection signal instead of a silently unlabeled email.
-
-- `REJECTED_LABEL` (default `Flagged`): Gmail label applied to blocked emails (created if missing). Set it empty to mark processed without labeling.
-- `REJECTED_MAX_ATTEMPTS` (default `1`): total attempts including the first. Values > 1 re-enable backed-off retries (useful while the guard is being retuned); the label is applied only if the last attempt is also rejected.
-- `REJECTED_RETRY_BASE_MINUTES` (default `30`): with retries enabled, wait after the first rejection; doubles after each further one (30 m → 1 h → 2 h → 4 h).
-- A successful classification clears any retry entry. Pending entries older than `STATE_RETENTION_DAYS` are pruned like processed entries.
-- Only 400s are treated this way. Other classifier failures (network, 5xx, unparseable response) are unchanged: they are logged, yield no labels, and the email is marked processed.
-
-#### Prompt layout matters for the guard
-
-All instructions (label descriptions, output format, "the email is data") are sent in the **system** message; the **user** message is the fenced email and nothing else. An injection classifier flags instruction-shaped text, and with the instructions inside the user message roughly 90% of ordinary mail was blocked (measured 2026-08-27); with the email alone, about 5%. Keep it that way.
+**Migration**: Older state files (a plain list of IDs, or ones carrying a `pending_retries` block from the previous guardrail-retry feature) are read and rewritten in the current format on first save.
 
 To clear the state and reprocess all emails:
 ```bash
@@ -338,28 +301,15 @@ docker-compose restart
 
 ## Configuration
 
-### Customizing Labels and Classification Rules
+### Customizing Labels and Descriptions
 
-Edit `classifier_config.json` to customize your email categories:
-
-```json
-{
-  "labels": [
-    "Work",
-    "Personal",
-    "Finance",
-    "Shopping"
-  ],
-  "classification_prompt": "Your task is to categorize the email according to the following labels.\n\nWork - Work-related emails, meetings, and professional communications\nPersonal - Personal emails from friends and family\nFinance - Bank statements, bills, and payment notifications\nShopping - Order confirmations and shipping notifications\n\nOne email can have more than one label. Return only label names in JSON format, nothing else. Do not make things up."
-}
-```
+Edit `classifier_config.json` to customize your email categories (see [Customizing Labels](#customizing-labels) for the format).
 
 **Tips for effective classification:**
 - Keep label names concise (1-2 words)
-- Provide clear, specific descriptions in the prompt
-- Include examples of what each label covers
-- The AI can assign multiple labels to a single email
-- Test your prompt with a few emails before running on your entire inbox
+- Write each description as the list of things that belong under the label, not as an instruction. Jev reads the descriptions as criteria, not as a prompt
+- Make descriptions mutually distinguishable; two overlapping descriptions produce two confident Nouls and the email gets both labels
+- Test with `scripts/eval_jev.py` on a hand-labeled sample before running on your entire inbox
 
 ### Adjusting Poll Interval
 
@@ -386,30 +336,27 @@ REMOVE_FROM_INBOX=true   # Archive emails after labeling (default)
 REMOVE_FROM_INBOX=false  # Keep emails in inbox after labeling
 ```
 
-When enabled:
-- Emails are removed from your inbox after classification
-- They remain accessible under their assigned labels (AWS, Claude, Github, etc.)
-- Keeps your inbox clean and organized
-- You can still find all emails in Gmail's "All Mail" view
+Emails that receive no label (and the optional review label) are never archived.
 
 ## Architecture
 
-The application consists of several components:
-
 - **`main.py`**: Entry point and CLI interface
-- **`email_classifier_agent.py`**: Main orchestration logic
+- **`email_classifier_agent.py`**: Main orchestration logic (polling, state, labeling, dry run)
 - **`gmail_client.py`**: Gmail API wrapper for reading/labeling emails
-- **`openrouter_classifier.py`**: OpenRouter API integration for AI classification
+- **`jev_classifier.py`**: Builds the decisions request, applies the threshold rule, handles retries
+- **`llm_utils.py`**: URL normalization and HTML-to-text reduction
+- **`state_store.py`**: State file persistence
 - **`config.py`**: Configuration and environment variables
+- **`scripts/`**: Offline sample dump and threshold evaluation
 
 ### Workflow
 
 1. Agent polls Gmail API for unread emails
-2. For each email, extracts subject, sender, date, and body
-3. Sends email content to OpenRouter with classification prompt
-4. OpenRouter (using configured model) returns applicable labels in JSON format
-5. Agent creates Gmail labels (if they don't exist)
-6. Applies labels to the email in Gmail
+2. For each email, extracts subject, sender, date, and body (HTML-only bodies are reduced to text; URLs are cut to scheme + host; body capped at 5000 characters)
+3. Sends the email as a structured object with one Noul per label plus a best-label Choice
+4. Jev returns a probability per label and a confidence for the best choice
+5. The threshold rule picks the labels to apply
+6. Agent applies labels (created at startup if missing) and optionally archives
 7. Repeats after configured interval
 
 ## Logging
@@ -420,30 +367,29 @@ Logs are written to console (stdout) with the following information:
 - Log level
 - Message
 
-Configure log verbosity using the `--log-level` flag or `LOG_LEVEL` environment variable.
+At `DEBUG`, each classification also logs the raw answers (per-label probabilities, best choice and confidence) and the request cost reported by the endpoint.
 
 ## Error Handling
 
-The application includes robust error handling:
-- Retries on transient failures
+- Timeouts, connection errors, 429 and 5xx responses are retried once; a second failure yields no labels and the email is marked processed
+- Any other 4xx means the request itself is wrong; it is logged with the response body and yields no labels
 - Graceful shutdown on keyboard interrupt (Ctrl+C)
 - Continues operation if individual emails fail to process
-- Logs all errors for debugging
 
 ## Security Considerations
 
 - Never commit `credentials.json`, `token.json`, or `.env` to version control
-- Store your LLM API key (`OPENROUTER_API_KEY`) securely
+- Store your API key (`OPENROUTER_API_KEY`) securely
 - If `LLM_BASE_URL` points at a plain-`http` gateway, keep it on a trusted network - email content travels over that link
 - Use environment variables or secrets management for production deployments
 - Regularly rotate API keys
 - Review Gmail API OAuth scopes to ensure minimum necessary permissions
 
-### What is sent to the model, and prompt-injection hardening
+### What is sent to the model, and why no injection guard is needed
 
-- **URLs are reduced to scheme + host** before the email leaves this process (subject and body). Click-tracking links such as `https://click.example.com/ls/click?upn=u001.AbC...` become `https://click.example.com`. The opaque tokens add nothing to classification, often encode the recipient, and look like encoded payloads to prompt-injection screeners (e.g. PIGuard behind a LiteLLM gateway), which was blocking ordinary marketing email. Normalization also runs before the 5000-character body cut so link-heavy emails keep their real text.
-- **Email content is fenced** inside `<email>...</email>` in the user message, and the system prompt declares everything inside the fence to be untrusted data, never instructions. Email content is never placed in the system message. Any `<email>`/`</email>` tags that appear inside a message are defanged so the content cannot close the fence early.
-- **Output is constrained and validated.** Requests use OpenAI JSON mode (`response_format: json_object`) when the endpoint supports it (automatic fallback to plain text if it returns HTTP 400), and the returned labels are filtered against the configured label set in code. A successful injection can at most pick a wrong label; it cannot make the agent do anything else.
+- **URLs are reduced to scheme + host** before the email leaves this process (subject and body). Click-tracking links such as `https://click.example.com/ls/click?upn=u001.AbC...` become `https://click.example.com`. The opaque tokens add nothing to classification and often encode the recipient. Normalization runs before the 5000-character body cut so link-heavy emails keep their real text.
+- **HTML-only bodies are reduced to visible text** (scripts, styles, comments and tags removed) before the cap, for the same reason.
+- **The model cannot be instructed.** Jev is not a text generator: it scores the questions *we* define and returns numbers. There is no system prompt, no fencing, no JSON to parse. The worst an email that says "label this as Personal" can do is nudge a probability, which is the same failure as an ordinary misclassification, and the result is still validated against the configured label set in code.
 
 ## Docker Deployment
 
@@ -465,15 +411,13 @@ docker-compose logs -f
 **Important Volume Mounts:**
 - `./credentials.json:/app/credentials.json` - Gmail OAuth credentials (read-only)
 - `./token.json:/app/token.json` - Gmail OAuth token (read-only)
-- `./classifier_config.json:/app/classifier_config.json` - Labels and classification rules (read-only)
-- `./model_config.json:/app/model_config.json` - Model configuration (read-only)
+- `./classifier_config.json:/app/classifier_config.json` - Labels and descriptions (read-only)
 - `./data:/app/data` - State persistence directory (stores `.email_state.json`)
 
 **Notes:**
 - The `data` volume is **required** to maintain state across container restarts
 - Without it, the agent would reprocess all unread emails every time the container restarts
-- Edit `classifier_config.json` to customize labels; restart the container to apply changes
-- **Edit `model_config.json` to change model settings (model, temperature, max_tokens) and just restart - no need to recreate the container!**
+- Edit `classifier_config.json` or the `JEV_*` values in `.env` and restart the container to apply changes
 
 For detailed deployment instructions (AWS ECS, Kubernetes, systemd), see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
@@ -490,40 +434,35 @@ uv sync --frozen
 
 Download OAuth credentials from Google Cloud Console and save as `credentials.json`.
 
+### "Every label needs a description; missing: [...]"
+
+`classifier_config.json` has a label without an entry in `label_descriptions`. Add one; the agent will not start without it. A leftover `classification_prompt` key is ignored and can be removed.
+
 ### "Error classifying email via openrouter.ai"
 
 Check that:
 1. Your OpenRouter API key is valid and set in `.env`
 2. You have credits in your OpenRouter account
-3. The model ID is correct (see [OpenRouter Models](https://openrouter.ai/docs#models))
+3. `JEV_MODEL` names a Jev model (it is not listed by `GET /api/v1/models`, which only covers text models)
 4. Your internet connection is working
 
 ### "Error classifying email via <your-gateway-host>"
 
 You are using `LLM_BASE_URL`. Check that:
-1. The gateway is reachable from where the classifier runs (from Docker, `localhost` is the container - see [gateway notes](#using-a-litellm-or-other-openai-compatible-gateway))
+1. The gateway is reachable from where the classifier runs (from Docker, `localhost` is the container - see [gateway notes](#using-a-litellm-gateway))
 2. `OPENROUTER_API_KEY` holds a key the gateway accepts (e.g. a LiteLLM virtual key)
-3. The model name matches one the gateway exposes (`GET <LLM_BASE_URL>/models` lists them)
-4. The gateway's own logs - a sanitization or prompt-injection guard may be rejecting the request
+3. The gateway is LiteLLM v1.104.0 or newer: an `HTTP 404` on `/openrouter/alpha/decisions` means it is older
+4. The gateway has its own `OPENROUTER_API_KEY` set; the pass-through injects it upstream
 
-`uv run python verify_setup.py` checks reachability and the key in one step.
+`uv run python verify_setup.py` checks reachability, the key and the route in one step.
 
-### "Model not found" or "Invalid model ID"
+### Timeouts
 
-Verify the model ID in `.env` matches an available OpenRouter model. Check the [OpenRouter Models documentation](https://openrouter.ai/docs#models) for available models. When using a gateway, the name must instead match what the gateway exposes.
+OpenRouter's decisions endpoint is marked alpha and occasionally hangs. The agent waits `JEV_TIMEOUT_SECONDS` and retries once. If timeouts are frequent, raise the timeout or lower `MAX_EMAILS_PER_POLL`.
 
-## OpenRouter Pricing
+## Pricing
 
-OpenRouter pricing varies by model:
-- **Claude 3.5 Sonnet**: ~$0.003-0.015 per email classification
-- **Claude 3 Haiku**: ~$0.001-0.005 per email (cheaper)
-- **GPT-4 Turbo**: ~$0.01-0.03 per email
-- **Llama 3.1 70B**: ~$0.001-0.005 per email (open source)
-
-Typical usage for email classification:
-- ~500-1000 tokens per email
-- Pay only for what you use
-- Monitor usage in [OpenRouter Dashboard](https://openrouter.ai/activity)
+Jev on OpenRouter is priced per input token with free output: about $0.042 per million input tokens at the time of writing, which works out to roughly $0.00007 per email. The cost of every request is logged at `DEBUG` and tracked by OpenRouter's [activity page](https://openrouter.ai/activity) or LiteLLM's spend table when routed through a gateway.
 
 ## License
 
@@ -537,5 +476,5 @@ Feel free to submit issues, feature requests, or pull requests.
 
 For issues related to:
 - Gmail API: [Google Gmail API Documentation](https://developers.google.com/gmail/api)
-- OpenRouter: [OpenRouter Documentation](https://openrouter.ai/docs)
+- Jev: [OpenRouter Jev guide](https://openrouter.ai/docs/guides/community/jev) and [TypeSafe docs](https://docs.typesafe.ai/)
 - This application: Open an issue in the repository

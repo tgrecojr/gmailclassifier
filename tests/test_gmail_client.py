@@ -235,13 +235,20 @@ class TestGetMessageBody:
         }
         assert client._get_message_body(payload) == "plain-body"
 
-    def test_falls_back_to_text_html_when_no_plain(self, client):
+    def test_falls_back_to_text_html_when_no_plain_and_strips_markup(self, client):
         payload = {
             "parts": [
-                {"mimeType": "text/html", "body": {"data": _b64("<p>html</p>")}},
+                {
+                    "mimeType": "text/html",
+                    "body": {"data": _b64("<style>p{}</style><p>Order &amp; ship</p>")},
+                },
             ]
         }
-        assert client._get_message_body(payload) == "<p>html</p>"
+        assert client._get_message_body(payload) == "Order & ship"
+
+    def test_html_only_direct_body_is_stripped(self, client):
+        payload = {"mimeType": "text/html", "body": {"data": _b64("<div>Hi</div>")}}
+        assert client._get_message_body(payload) == "Hi"
 
     def test_uses_direct_body_when_no_parts(self, client):
         payload = {"body": {"data": _b64("direct")}}

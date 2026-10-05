@@ -2,245 +2,75 @@
 Tests for config.py - configuration loading and validation.
 """
 
+import importlib
 import json
+
 import pytest
+
+VALID = {
+    "labels": ["Finance", "Shopping"],
+    "label_descriptions": {
+        "Finance": "Bills and bank statements",
+        "Shopping": "Order and shipping notifications",
+    },
+}
+
+
+def _write(tmp_path, data):
+    path = tmp_path / "classifier_config.json"
+    path.write_text(data if isinstance(data, str) else json.dumps(data))
+    return str(path)
 
 
 @pytest.mark.unit
-class TestLoadModelConfig:
-    """Tests for load_model_config function."""
+class TestLoadClassifierConfig:
+    """load_classifier_config requires labels and a description per label."""
 
-    def test_valid_model_config(self, tmp_path):
-        """Test loading a valid model configuration file."""
-        # Create a temporary config file
-        config_file = tmp_path / "model_config.json"
-        config_data = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "temperature": 0.0,
-            "max_tokens": 1000,
-        }
-        config_file.write_text(json.dumps(config_data))
+    def test_valid_config(self, tmp_path):
+        from config import load_classifier_config
 
-        # Import after creating the file to avoid import-time config loading
-        from config import load_model_config
+        result = load_classifier_config(_write(tmp_path, VALID))
+        assert result["labels"] == ["Finance", "Shopping"]
+        assert result["label_descriptions"]["Finance"] == "Bills and bank statements"
 
-        # Load and verify
-        result = load_model_config(str(config_file))
-        assert result["model"] == "anthropic/claude-3.5-sonnet"
-        assert result["temperature"] == 0.0
-        assert result["max_tokens"] == 1000
+    def test_legacy_classification_prompt_is_tolerated(self, tmp_path):
+        from config import load_classifier_config
 
-    def test_missing_config_file(self):
-        """Test error when config file doesn't exist."""
-        from config import load_model_config
+        legacy = {**VALID, "classification_prompt": "old prompt text"}
+        result = load_classifier_config(_write(tmp_path, legacy))
+        assert result["labels"] == ["Finance", "Shopping"]
 
-        with pytest.raises(FileNotFoundError) as exc_info:
-            load_model_config("nonexistent_file.json")
+    def test_missing_file(self):
+        from config import load_classifier_config
 
-        assert "Model config file not found" in str(exc_info.value)
-        assert "model_config.example.json" in str(exc_info.value)
-
-    def test_missing_model_field(self, tmp_path):
-        """Test error when 'model' field is missing."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {"temperature": 0.0, "max_tokens": 1000}
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        with pytest.raises(ValueError) as exc_info:
-            load_model_config(str(config_file))
-
-        assert "must contain 'model' field" in str(exc_info.value)
-
-    def test_missing_temperature_field(self, tmp_path):
-        """Test error when 'temperature' field is missing."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "max_tokens": 1000,
-        }
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        with pytest.raises(ValueError) as exc_info:
-            load_model_config(str(config_file))
-
-        assert "must contain 'temperature' field" in str(exc_info.value)
-
-    def test_missing_max_tokens_field(self, tmp_path):
-        """Test error when 'max_tokens' field is missing."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "temperature": 0.0,
-        }
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        with pytest.raises(ValueError) as exc_info:
-            load_model_config(str(config_file))
-
-        assert "must contain 'max_tokens' field" in str(exc_info.value)
-
-    def test_invalid_model_type(self, tmp_path):
-        """Test error when 'model' is not a string."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {"model": 123, "temperature": 0.0, "max_tokens": 1000}
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        with pytest.raises(ValueError) as exc_info:
-            load_model_config(str(config_file))
-
-        assert "'model' must be a string" in str(exc_info.value)
-
-    def test_invalid_temperature_type(self, tmp_path):
-        """Test error when 'temperature' is not a number."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "temperature": "not_a_number",
-            "max_tokens": 1000,
-        }
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        with pytest.raises(ValueError) as exc_info:
-            load_model_config(str(config_file))
-
-        assert "'temperature' must be a number" in str(exc_info.value)
-
-    def test_invalid_max_tokens_type(self, tmp_path):
-        """Test error when 'max_tokens' is not an integer."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "temperature": 0.0,
-            "max_tokens": "not_an_int",
-        }
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        with pytest.raises(ValueError) as exc_info:
-            load_model_config(str(config_file))
-
-        assert "'max_tokens' must be an integer" in str(exc_info.value)
-
-    def test_temperature_out_of_range_high(self, tmp_path):
-        """Test error when temperature is above 2.0."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "temperature": 2.5,
-            "max_tokens": 1000,
-        }
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        with pytest.raises(ValueError) as exc_info:
-            load_model_config(str(config_file))
-
-        assert "'temperature' must be between 0 and 2" in str(exc_info.value)
-
-    def test_temperature_out_of_range_low(self, tmp_path):
-        """Test error when temperature is below 0.0."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "temperature": -0.1,
-            "max_tokens": 1000,
-        }
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        with pytest.raises(ValueError) as exc_info:
-            load_model_config(str(config_file))
-
-        assert "'temperature' must be between 0 and 2" in str(exc_info.value)
-
-    def test_max_tokens_zero(self, tmp_path):
-        """Test error when max_tokens is 0."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "temperature": 0.0,
-            "max_tokens": 0,
-        }
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        with pytest.raises(ValueError) as exc_info:
-            load_model_config(str(config_file))
-
-        assert "'max_tokens' must be greater than 0" in str(exc_info.value)
-
-    def test_max_tokens_negative(self, tmp_path):
-        """Test error when max_tokens is negative."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "temperature": 0.0,
-            "max_tokens": -100,
-        }
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        with pytest.raises(ValueError) as exc_info:
-            load_model_config(str(config_file))
-
-        assert "'max_tokens' must be greater than 0" in str(exc_info.value)
+        with pytest.raises(FileNotFoundError, match="classifier_config.example.json"):
+            load_classifier_config("nonexistent_file.json")
 
     def test_invalid_json(self, tmp_path):
-        """Test error when config file contains invalid JSON."""
-        config_file = tmp_path / "model_config.json"
-        config_file.write_text("{ invalid json }")
+        from config import load_classifier_config
 
-        from config import load_model_config
+        with pytest.raises(ValueError, match="Invalid JSON"):
+            load_classifier_config(_write(tmp_path, "{ invalid json }"))
 
-        with pytest.raises(ValueError) as exc_info:
-            load_model_config(str(config_file))
+    @pytest.mark.parametrize(
+        "data,message",
+        [
+            ({"label_descriptions": {}}, "must contain 'labels'"),
+            ({"labels": "Finance", "label_descriptions": {}}, "list of non-empty"),
+            ({"labels": ["", "A"], "label_descriptions": {}}, "list of non-empty"),
+            ({"labels": ["Finance"]}, "must contain 'label_descriptions'"),
+            ({"labels": ["Finance"], "label_descriptions": "x"}, "must map"),
+            ({"labels": ["Finance"], "label_descriptions": {"Finance": 1}}, "must map"),
+            ({"labels": ["Finance"], "label_descriptions": {}}, "missing"),
+            ({"labels": [], "label_descriptions": {}}, "At least one"),
+            ({"labels": ["None"], "label_descriptions": {"None": "x"}}, "reserved"),
+        ],
+    )
+    def test_rejects_invalid_shapes(self, tmp_path, data, message):
+        from config import load_classifier_config
 
-        assert "Invalid JSON in config file" in str(exc_info.value)
-
-    def test_temperature_float(self, tmp_path):
-        """Test that temperature can be a float."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "temperature": 0.5,
-            "max_tokens": 1000,
-        }
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        result = load_model_config(str(config_file))
-        assert result["temperature"] == 0.5
-
-    def test_temperature_int(self, tmp_path):
-        """Test that temperature can be an integer."""
-        config_file = tmp_path / "model_config.json"
-        config_data = {
-            "model": "anthropic/claude-3.5-sonnet",
-            "temperature": 1,
-            "max_tokens": 1000,
-        }
-        config_file.write_text(json.dumps(config_data))
-
-        from config import load_model_config
-
-        result = load_model_config(str(config_file))
-        assert result["temperature"] == 1
+        with pytest.raises(ValueError, match=message):
+            load_classifier_config(_write(tmp_path, data))
 
 
 @pytest.fixture
@@ -248,17 +78,25 @@ def reload_config(monkeypatch):
     """
     Factory fixture: reload the config module with environment overrides applied.
 
-    The reload is hermetic (a developer's .env / model_config.json are ignored),
-    and the module is reloaded again at teardown so other tests see the normal state.
+    The reload is hermetic (a developer's .env is ignored), and the module is
+    reloaded again at teardown so other tests see the normal state.
     """
-    import importlib
     import config
 
     def _reload(**env):
         # Keep config.load_dotenv() from re-reading a real .env during reload
         monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: False)
-        monkeypatch.delenv("LLM_BASE_URL", raising=False)
-        monkeypatch.delenv("MODEL_CONFIG_PATH", raising=False)
+        for key in (
+            "LLM_BASE_URL",
+            "JEV_MODEL",
+            "JEV_DECISIONS_URL",
+            "JEV_LABEL_THRESHOLD",
+            "JEV_FALLBACK_CONFIDENCE",
+            "JEV_TIMEOUT_SECONDS",
+            "JEV_REVIEW_LABEL",
+            "DRY_RUN",
+        ):
+            monkeypatch.delenv(key, raising=False)
         for key, value in env.items():
             monkeypatch.setenv(key, value)
         return importlib.reload(config)
@@ -299,3 +137,62 @@ class TestLLMBaseURL:
             OPENROUTER_API_KEY="sk-litellm-virtual-key",
         )
         assert config.OPENROUTER_API_KEY == "sk-litellm-virtual-key"
+
+
+@pytest.mark.unit
+class TestJevSettings:
+    """Jev endpoint, model, thresholds and dry-run flags."""
+
+    def test_defaults(self, reload_config):
+        config = reload_config()
+        assert config.JEV_MODEL == "typesafe/jev-1.13"
+        assert config.JEV_DECISIONS_URL == "https://openrouter.ai/api/alpha/decisions"
+        assert config.JEV_LABEL_THRESHOLD == 0.7
+        assert config.JEV_FALLBACK_CONFIDENCE == 0.5
+        assert config.JEV_TIMEOUT_SECONDS == 30.0
+        assert config.JEV_REVIEW_LABEL == ""
+        assert config.DRY_RUN is False
+        assert config.LABELS == ["AWS", "Finance", "Work", "Personal"]
+        assert set(config.LABEL_DESCRIPTIONS) == set(config.LABELS)
+
+    def test_decisions_url_derived_from_gateway_base_url(self, reload_config):
+        config = reload_config(LLM_BASE_URL="http://litellm.lan:4000/v1")
+        assert (
+            config.JEV_DECISIONS_URL
+            == "http://litellm.lan:4000/openrouter/alpha/decisions"
+        )
+
+    def test_explicit_decisions_url_wins(self, reload_config):
+        config = reload_config(
+            LLM_BASE_URL="http://litellm.lan:4000/v1",
+            JEV_DECISIONS_URL=" https://openrouter.ai/api/alpha/decisions ",
+        )
+        assert config.JEV_DECISIONS_URL == "https://openrouter.ai/api/alpha/decisions"
+
+    def test_overrides(self, reload_config):
+        config = reload_config(
+            JEV_MODEL="typesafe/jev-1.14",
+            JEV_LABEL_THRESHOLD="0.8",
+            JEV_FALLBACK_CONFIDENCE="0.6",
+            JEV_TIMEOUT_SECONDS="10",
+            JEV_REVIEW_LABEL=" Review ",
+            DRY_RUN="TRUE",
+        )
+        assert config.JEV_MODEL == "typesafe/jev-1.14"
+        assert config.JEV_LABEL_THRESHOLD == 0.8
+        assert config.JEV_FALLBACK_CONFIDENCE == 0.6
+        assert config.JEV_TIMEOUT_SECONDS == 10.0
+        assert config.JEV_REVIEW_LABEL == "Review"
+        assert config.DRY_RUN is True
+
+    @pytest.mark.parametrize(
+        "env",
+        [
+            {"JEV_LABEL_THRESHOLD": "1.5"},
+            {"JEV_FALLBACK_CONFIDENCE": "-0.1"},
+            {"JEV_TIMEOUT_SECONDS": "0"},
+        ],
+    )
+    def test_out_of_range_values_fail_fast(self, reload_config, env):
+        with pytest.raises(ValueError, match="must be between"):
+            reload_config(**env)

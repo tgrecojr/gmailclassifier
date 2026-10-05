@@ -9,7 +9,7 @@ dependencies = [
     "google-auth-httplib2>=0.1.0",
     "google-api-python-client>=2.0.0",
     "python-dotenv>=1.0.0",
-    "openai>=1.12.0",
+    "httpx2>=2.0.0",
 ]
 
 [dependency-groups]
@@ -61,6 +61,7 @@ omit = [
     "main.py",
     "setup_token.py",
     "verify_setup.py",
+    "scripts/*",
 ]
 
 [tool.coverage.report]

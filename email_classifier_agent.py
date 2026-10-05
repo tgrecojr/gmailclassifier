@@ -1,12 +1,11 @@
 import logging
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import config
 import state_store
 from gmail_client import GmailClient
-from openrouter_classifier import ClassificationRejected, OpenRouterClassifier
-from retry_tracker import RetryTracker
+from jev_classifier import JevClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +15,8 @@ class EmailClassifierAgent:
 
     def __init__(self):
         """Initialize the email classifier agent."""
-        # Initialize Gmail client
+        self.dry_run = config.DRY_RUN
+
         self.gmail_client = GmailClient(
             credentials_path=config.GMAIL_CREDENTIALS_PATH,
             token_path=config.GMAIL_TOKEN_PATH,
@@ -24,43 +24,40 @@ class EmailClassifierAgent:
             headless=config.GMAIL_HEADLESS_MODE,
         )
 
-        # Initialize LLM classifier (OpenRouter by default, or a custom gateway)
-        self.classifier = OpenRouterClassifier(
+        self.classifier = JevClassifier(
             api_key=config.OPENROUTER_API_KEY,
-            model=config.OPENROUTER_MODEL,
-            temperature=config.OPENROUTER_TEMPERATURE,
-            max_tokens=config.OPENROUTER_MAX_TOKENS,
-            base_url=config.LLM_BASE_URL,
+            labels=config.LABELS,
+            label_descriptions=config.LABEL_DESCRIPTIONS,
+            model=config.JEV_MODEL,
+            decisions_url=config.JEV_DECISIONS_URL,
+            label_threshold=config.JEV_LABEL_THRESHOLD,
+            fallback_confidence=config.JEV_FALLBACK_CONFIDENCE,
+            timeout_seconds=config.JEV_TIMEOUT_SECONDS,
         )
 
-        # Create Gmail labels if they don't exist
+        # Gmail labels are created up front (skipped in dry run: no writes)
         self.label_id_map = self._initialize_labels()
-        # Label for emails the gateway guardrail refuses (None = don't label)
-        self.rejected_label_id = (
-            self.gmail_client.create_label_if_not_exists(config.REJECTED_LABEL)
-            if config.REJECTED_LABEL
+        self.review_label_id = (
+            self.gmail_client.create_label_if_not_exists(config.JEV_REVIEW_LABEL)
+            if config.JEV_REVIEW_LABEL and not self.dry_run
             else None
         )
 
-        # Load processed email state (+ emails parked for retry after a 400)
         self.state_file = config.STATE_FILE
         self.retention_days = config.STATE_RETENTION_DAYS
-        self.retries = RetryTracker(
-            max_attempts=config.REJECTED_MAX_ATTEMPTS,
-            base_delay=timedelta(minutes=config.REJECTED_RETRY_BASE_MINUTES),
-        )
         self.processed_emails: dict[str, str] = self._load_state()
 
         logger.info(
-            f"Email Classifier Agent initialized with LLM endpoint "
-            f"{config.LLM_BASE_URL} (model: {config.OPENROUTER_MODEL})"
+            f"Email Classifier Agent initialized with Jev at "
+            f"{config.JEV_DECISIONS_URL} (model: {config.JEV_MODEL}, "
+            f"label_threshold: {config.JEV_LABEL_THRESHOLD}, "
+            f"fallback_confidence: {config.JEV_FALLBACK_CONFIDENCE}, "
+            f"review_label: {config.JEV_REVIEW_LABEL or '<none>'}"
+            f"{', DRY RUN' if self.dry_run else ''})"
         )
         logger.info(
-            f"Loaded {len(self.processed_emails)} processed emails and "
-            f"{len(self.retries.entries)} pending retries from state "
-            f"(retention: {self.retention_days} days; rejected emails tried up to "
-            f"{self.retries.max_attempts}x from {config.REJECTED_RETRY_BASE_MINUTES}m, "
-            f"then labeled {config.REJECTED_LABEL or '<none>'})"
+            f"Loaded {len(self.processed_emails)} processed emails from state "
+            f"(retention: {self.retention_days} days)"
         )
 
     def _initialize_labels(self) -> dict[str, str]:
@@ -70,6 +67,10 @@ class EmailClassifierAgent:
         Returns:
             Dictionary mapping label names to Gmail label IDs
         """
+        if self.dry_run:
+            logger.info("DRY RUN: not creating Gmail labels")
+            return {}
+
         label_map = {}
         for label_name in config.LABELS:
             label_id = self.gmail_client.create_label_if_not_exists(label_name)
@@ -81,14 +82,12 @@ class EmailClassifierAgent:
 
     def _load_state(self) -> dict[str, str]:
         """
-        Load processed email IDs (and pending retries) from the state file,
-        applying retention cleanup.
+        Load processed email IDs from the state file, applying retention cleanup.
 
         Returns:
             Dictionary mapping email IDs to ISO format timestamps
         """
-        processed_emails, pending = state_store.load_state(self.state_file)
-        self.retries.entries = pending
+        processed_emails = state_store.load_state(self.state_file)
         processed_emails = self._cleanup_old_state(processed_emails)
         logger.info(
             f"Loaded {len(processed_emails)} processed email IDs from {self.state_file}"
@@ -97,23 +96,26 @@ class EmailClassifierAgent:
 
     def _cleanup_old_state(self, processed_emails: dict[str, str]) -> dict[str, str]:
         """
-        Remove processed entries (and pending retries) older than the
-        retention period. Retention <= 0 keeps everything.
+        Remove processed entries older than the retention period.
+        Retention <= 0 keeps everything.
         """
         if self.retention_days <= 0:
             return processed_emails
 
         cutoff = state_store.retention_cutoff(self.retention_days)
-        self.retries.prune(cutoff)
         return state_store.cleanup_old_entries(
             processed_emails, cutoff, self.retention_days
         )
 
     def _save_state(self):
-        """Persist processed email IDs and pending retries."""
-        state_store.save_state(
-            self.state_file, self.processed_emails, self.retries.to_dict()
-        )
+        """Persist processed email IDs (never in dry run)."""
+        if self.dry_run:
+            return
+        state_store.save_state(self.state_file, self.processed_emails)
+
+    def _mark_processed(self, email_id: str) -> None:
+        self.processed_emails[email_id] = datetime.now(UTC).isoformat()
+        self._save_state()
 
     def process_email(self, email: dict) -> bool:
         """
@@ -131,41 +133,29 @@ class EmailClassifierAgent:
                 logger.error("Email missing ID field")
                 return False
 
+            subject = email.get("subject", "")[:50]
+
             # Check if already processed
             if email_id in self.processed_emails:
-                logger.info(
-                    f"Skipping already processed email: {email['subject'][:50]}..."
-                )
+                logger.info(f"Skipping already processed email: {subject}...")
                 return True  # Return True since it was successfully handled before
 
-            # Rejected earlier and not yet due for another try
-            if self.retries.is_deferred(email_id, datetime.now(UTC)):
-                logger.debug(
-                    f"Deferring retry of rejected email: {email['subject'][:50]}..."
+            logger.info(f"Processing email: {subject}...")
+
+            predicted_labels = self.classifier.classify_email(email)
+
+            if self.dry_run:
+                logger.info(
+                    f"DRY RUN: would apply {predicted_labels or 'no labels'} "
+                    f"to email: {subject}"
                 )
-                return False
-
-            logger.info(f"Processing email: {email['subject'][:50]}...")
-
-            # Classify the email
-            try:
-                predicted_labels = self.classifier.classify_email(
-                    email=email,
-                    classification_prompt=config.CLASSIFICATION_PROMPT,
-                    available_labels=config.LABELS,
-                )
-            except ClassificationRejected as e:
-                self._handle_rejection(email, str(e))
-                return False
-
-            # A successful round trip resolves any earlier rejection
-            self.retries.clear(email_id)
+                # Remembered in memory only so the same poll results are not
+                # re-classified every cycle; nothing is written to disk.
+                self._mark_processed(email_id)
+                return bool(predicted_labels)
 
             if not predicted_labels:
-                logger.warning(f"No labels predicted for email: {email['subject']}")
-                # Still mark as processed to avoid re-attempting
-                self.processed_emails[email_id] = datetime.now(UTC).isoformat()
-                self._save_state()
+                self._handle_unlabeled(email)
                 return False
 
             # Get Gmail label IDs
@@ -185,53 +175,37 @@ class EmailClassifierAgent:
                     if config.REMOVE_FROM_INBOX
                     else "Applied labels"
                 )
-                logger.info(
-                    f"{action} {predicted_labels} to email: {email['subject'][:50]}"
-                )
+                logger.info(f"{action} {predicted_labels} to email: {subject}")
             else:
                 logger.warning(
                     f"No valid label IDs found for predicted labels: {predicted_labels}"
                 )
 
-            # Mark as processed with timestamp and save state
-            self.processed_emails[email_id] = datetime.now(UTC).isoformat()
-            self._save_state()
-
+            self._mark_processed(email_id)
             return True
 
         except Exception as e:
             logger.error(f"Error processing email {email.get('id', 'unknown')}: {e}")
             return False
 
-    def _handle_rejection(self, email: dict, reason: str) -> None:
+    def _handle_unlabeled(self, email: dict) -> None:
         """
-        The endpoint answered 400 (guardrail block). Once the attempt cap is
-        reached (default: immediately), the email is labeled REJECTED_LABEL —
-        kept in the inbox so a human sees it — and marked processed so it is
-        never re-sent. With a cap > 1 it is parked for a backed-off retry first.
+        No label cleared either threshold (or the request failed). The email
+        is marked processed so it is not re-sent; with JEV_REVIEW_LABEL set it
+        is also labeled and left in the inbox so a human sees it.
         """
-        email_id = email["id"]
         subject = email.get("subject", "")[:50]
-        now = datetime.now(UTC)
-        gave_up = self.retries.record_rejection(email_id, reason, now)
-        if gave_up:
-            if self.rejected_label_id:
-                self.gmail_client.add_labels_to_message(
-                    email_id, [self.rejected_label_id], remove_from_inbox=False
-                )
-            logger.warning(
-                f"Rejected after {self.retries.max_attempts} attempt(s); "
-                f"labeled {config.REJECTED_LABEL or '<none>'} and marked processed: "
-                f"{subject}"
+        if self.review_label_id:
+            self.gmail_client.add_labels_to_message(
+                email["id"], [self.review_label_id], remove_from_inbox=False
             )
-            self.processed_emails[email_id] = now.isoformat()
+            logger.warning(
+                f"No labels predicted; labeled {config.JEV_REVIEW_LABEL} and "
+                f"marked processed: {subject}"
+            )
         else:
-            attempts = self.retries.attempts(email_id)
-            logger.warning(
-                f"Email rejected (attempt {attempts}/{self.retries.max_attempts}); "
-                f"will retry after {self.retries.delay_after(attempts)}: {subject}"
-            )
-        self._save_state()
+            logger.warning(f"No labels predicted for email: {subject}")
+        self._mark_processed(email["id"])
 
     def run_continuous(self):
         """

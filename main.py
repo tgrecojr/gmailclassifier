@@ -2,15 +2,17 @@
 """
 Gmail Email Classifier Agent
 
-An agentic application using LLM providers to automatically read and label Gmail emails
-based on predefined categories.
+Reads unread Gmail messages and labels them with Jev, TypeSafe's
+non-generative decision model, via OpenRouter or a LiteLLM gateway.
 """
 
-import sys, os
-import logging
 import argparse
-from email_classifier_agent import EmailClassifierAgent
+import logging
+import os
+import sys
+
 import config
+from email_classifier_agent import EmailClassifierAgent
 
 
 def setup_logging(level: str = "INFO"):
@@ -25,10 +27,10 @@ def setup_logging(level: str = "INFO"):
 
 
 def main():
-    os.environ["ANONYMIZED_TELEMETRY"] = "false"
     """Main entry point for the email classifier agent."""
+    os.environ["ANONYMIZED_TELEMETRY"] = "false"
     parser = argparse.ArgumentParser(
-        description="Gmail Email Classifier Agent (OpenRouter or OpenAI-compatible gateway)"
+        description="Gmail Email Classifier Agent (Jev via OpenRouter or a LiteLLM gateway)"
     )
     parser.add_argument(
         "--log-level",
@@ -46,10 +48,16 @@ def main():
     logger.info("=" * 60)
     logger.info("Gmail Email Classifier Agent")
     logger.info("=" * 60)
-    logger.info(f"LLM Base URL: {config.LLM_BASE_URL}")
-    logger.info(f"Model: {config.OPENROUTER_MODEL}")
+    logger.info(f"Decisions URL: {config.JEV_DECISIONS_URL}")
+    logger.info(f"Model: {config.JEV_MODEL}")
+    logger.info(
+        f"Thresholds: label >= {config.JEV_LABEL_THRESHOLD}, "
+        f"fallback confidence >= {config.JEV_FALLBACK_CONFIDENCE}"
+    )
     logger.info(f"Labels: {', '.join(config.LABELS)}")
     logger.info(f"Poll Interval: {config.POLL_INTERVAL_SECONDS}s")
+    if config.DRY_RUN:
+        logger.info("DRY RUN: labels are logged, Gmail and state are not modified")
     logger.info("=" * 60)
 
     try:

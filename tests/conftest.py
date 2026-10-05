@@ -2,10 +2,12 @@
 Shared test fixtures and configurations for pytest.
 """
 
-import pytest
 import json
 import os
+import tempfile
 from typing import Dict, List
+
+import pytest
 
 # Sample test data
 TEST_EMAIL = {
@@ -18,45 +20,40 @@ TEST_EMAIL = {
 
 TEST_LABELS = ["AWS", "Finance", "Work", "Personal"]
 
-TEST_CLASSIFICATION_PROMPT = """Classify this email into one or more categories.
-Consider the sender, subject, and content to determine the most appropriate labels."""
+TEST_LABEL_DESCRIPTIONS = {
+    "AWS": "Notifications, billing and alerts from Amazon Web Services",
+    "Finance": "Bank statements, bills, invoices and payment confirmations",
+    "Work": "Professional correspondence, meetings and project updates",
+    "Personal": "Messages from friends and family",
+}
 
-
-# Global flag to track if we created the config file
-_created_test_config = False
+_config_dir: tempfile.TemporaryDirectory | None = None
 
 
 def pytest_configure(config):
     """
-    Create classifier_config.json before test collection.
-
-    This runs before pytest starts collecting tests, ensuring the config
-    module can import successfully in CI environments where
-    classifier_config.json doesn't exist.
+    Point CLASSIFIER_CONFIG_PATH at a throwaway classifier config before test
+    collection, so importing `config` works without a developer's real file
+    (and never reads it).
     """
-    global _created_test_config
-    config_path = "classifier_config.json"
-
-    if not os.path.exists(config_path):
-        test_config = {
-            "labels": TEST_LABELS,
-            "classification_prompt": TEST_CLASSIFICATION_PROMPT,
-        }
-        with open(config_path, "w") as f:
-            json.dump(test_config, f, indent=2)
-        _created_test_config = True
+    global _config_dir
+    _config_dir = tempfile.TemporaryDirectory(prefix="gmailclassifier-tests-")
+    path = os.path.join(_config_dir.name, "classifier_config.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(
+            {"labels": TEST_LABELS, "label_descriptions": TEST_LABEL_DESCRIPTIONS},
+            f,
+            indent=2,
+        )
+    os.environ["CLASSIFIER_CONFIG_PATH"] = path
 
 
 def pytest_unconfigure(config):
-    """
-    Cleanup: remove test classifier_config.json if we created it.
-    """
-    global _created_test_config
-    config_path = "classifier_config.json"
-
-    if _created_test_config and os.path.exists(config_path):
-        os.unlink(config_path)
-        _created_test_config = False
+    """Cleanup the throwaway classifier config."""
+    global _config_dir
+    if _config_dir is not None:
+        _config_dir.cleanup()
+        _config_dir = None
 
 
 @pytest.fixture
@@ -72,6 +69,6 @@ def test_labels() -> List[str]:
 
 
 @pytest.fixture
-def classification_prompt() -> str:
-    """Sample classification prompt."""
-    return TEST_CLASSIFICATION_PROMPT
+def test_label_descriptions() -> Dict[str, str]:
+    """Sample per-label descriptions."""
+    return dict(TEST_LABEL_DESCRIPTIONS)

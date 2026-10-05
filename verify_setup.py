@@ -5,6 +5,7 @@ Setup Verification Script
 Checks that all prerequisites are configured correctly before running the agent.
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -16,6 +17,7 @@ YELLOW = "\033[93m"
 RESET = "\033[0m"
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+LITELLM_MIN_VERSION = "v1.104.0"
 
 
 def check_file_exists(filepath: str, name: str) -> bool:
@@ -60,7 +62,7 @@ def check_dependencies() -> bool:
         "google.auth",
         "google_auth_oauthlib",
         "googleapiclient",
-        "openai",
+        "httpx2",
         "dotenv",
     ]
 
@@ -76,46 +78,92 @@ def check_dependencies() -> bool:
     return all_installed
 
 
-def resolve_base_url() -> str:
-    """Return the effective LLM base URL (mirrors config.py logic)."""
-    return os.getenv("LLM_BASE_URL", "").strip() or OPENROUTER_BASE_URL
+def check_classifier_config(path: str) -> bool:
+    """Every label needs a description: Jev only ever sees the descriptions."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+    except (OSError, ValueError) as e:
+        print(f"{RED}✗{RESET} Classifier config unreadable: {e}")
+        return False
+
+    labels = cfg.get("labels") or []
+    descriptions = cfg.get("label_descriptions") or {}
+    missing = [label for label in labels if not descriptions.get(label)]
+    if not labels:
+        print(f"{RED}✗{RESET} Classifier config has no labels")
+        return False
+    if missing:
+        print(f"{RED}✗{RESET} 'label_descriptions' missing for: {', '.join(missing)}")
+        return False
+    print(f"{GREEN}✓{RESET} {len(labels)} labels, each with a description")
+    if "classification_prompt" in cfg:
+        print(
+            f"{YELLOW}  Note:{RESET} 'classification_prompt' is no longer used and can be removed"
+        )
+    return True
 
 
-def check_llm_endpoint() -> bool:
-    """Check that the configured LLM endpoint accepts the API key."""
-    base_url = resolve_base_url()
-    if base_url == OPENROUTER_BASE_URL:
-        print(f"  Endpoint: {base_url} (OpenRouter default)")
-    else:
-        print(f"  Endpoint: {base_url} (custom via LLM_BASE_URL)")
+def resolve_decisions_url() -> str:
+    """Return the effective decisions URL (mirrors config.py logic)."""
+    from jev_classifier import decisions_url_for
+
+    explicit = os.getenv("JEV_DECISIONS_URL", "").strip()
+    if explicit:
+        return explicit
+    return decisions_url_for(
+        os.getenv("LLM_BASE_URL", "").strip() or OPENROUTER_BASE_URL
+    )
+
+
+def check_jev_endpoint() -> bool:
+    """Send one tiny decision (~$0.00002) to prove the route, key and model work."""
+    from jev_classifier import DEFAULT_MODEL, JevClassifier, JevRequestError
+
+    url = resolve_decisions_url()
+    via_gateway = "openrouter.ai" not in url
+    print(
+        f"  Endpoint: {url} ({'via gateway' if via_gateway else 'OpenRouter direct'})"
+    )
 
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key:
         print(f"{RED}✗{RESET} Cannot test endpoint without OPENROUTER_API_KEY")
         return False
 
+    classifier = JevClassifier(
+        api_key=api_key,
+        labels=["Probe"],
+        label_descriptions={"Probe": "A short test message"},
+        model=os.getenv("JEV_MODEL", "").strip() or DEFAULT_MODEL,
+        decisions_url=url,
+        timeout_seconds=30,
+        retry_delay_seconds=0,
+    )
     try:
-        import openai
-
-        client = openai.OpenAI(api_key=api_key, base_url=base_url)
-        # /models is served by OpenRouter and LiteLLM alike; cheap auth + reachability probe
-        client.models.list()
-        print(f"{GREEN}✓{RESET} LLM endpoint reachable and API key accepted")
-        return True
-    except openai.AuthenticationError:
-        print(f"{RED}✗{RESET} LLM endpoint rejected the API key (401)")
-        return False
-    except openai.APIConnectionError as e:
-        print(f"{RED}✗{RESET} Could not connect to LLM endpoint: {e}")
-        if base_url != OPENROUTER_BASE_URL:
+        answers = classifier.decide({"subject": "test", "body": "hello", "from": "x"})
+    except JevRequestError as e:
+        print(f"{RED}✗{RESET} Decisions endpoint failed: {e}")
+        message = str(e)
+        if "HTTP 401" in message or "HTTP 403" in message:
+            print(f"{YELLOW}  Hint:{RESET} the endpoint rejected OPENROUTER_API_KEY")
+        elif "HTTP 404" in message and via_gateway:
+            print(
+                f"{YELLOW}  Hint:{RESET} the gateway does not serve /openrouter/alpha/decisions; "
+                f"LiteLLM {LITELLM_MIN_VERSION} or newer is required"
+            )
+        elif "transport error" in message and via_gateway:
             print(
                 f"{YELLOW}  Hint:{RESET} if running in Docker, 'localhost' refers to the "
                 "container - use host.docker.internal or the LAN IP instead"
             )
         return False
-    except Exception as e:
-        print(f"{YELLOW}⚠{RESET} Could not verify LLM endpoint: {e}")
-        return False
+
+    probe = answers.get("is_Probe", {}).get("noul")
+    print(
+        f"{GREEN}✓{RESET} Decisions endpoint reachable, key accepted (probe noul={probe})"
+    )
+    return True
 
 
 def main():
@@ -142,7 +190,10 @@ def main():
     checks.append(check_file_exists(".env", ".env configuration file"))
     checks.append(check_file_exists("credentials.json", "Gmail OAuth credentials"))
     classifier_config = os.getenv("CLASSIFIER_CONFIG_PATH", "classifier_config.json")
-    checks.append(check_file_exists(classifier_config, "Classifier config"))
+    config_present = check_file_exists(classifier_config, "Classifier config")
+    checks.append(config_present)
+    if config_present:
+        checks.append(check_classifier_config(classifier_config))
     print()
 
     print("3. Environment Variables")
@@ -150,11 +201,12 @@ def main():
     print()
 
     print("4. Python Dependencies")
-    checks.append(check_dependencies())
+    deps_ok = check_dependencies()
+    checks.append(deps_ok)
     print()
 
-    print("5. LLM Endpoint Access")
-    checks.append(check_llm_endpoint())
+    print("5. Jev Decisions Endpoint")
+    checks.append(check_jev_endpoint() if deps_ok else False)
     print()
 
     # Summary

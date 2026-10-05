@@ -8,9 +8,13 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import logging
-from llm_utils import normalize_urls
+from llm_utils import normalize_urls, strip_html
 
 logger = logging.getLogger(__name__)
+
+
+def _decode(data: str) -> str:
+    return base64.urlsafe_b64decode(data).decode("utf-8")
 
 
 class GmailClient:
@@ -168,24 +172,28 @@ class GmailClient:
             return None
 
     def _get_message_body(self, payload: Dict) -> str:
-        """Extract message body from payload."""
+        """
+        Extract message body from payload.
+
+        text/plain is preferred. When only text/html is available it is reduced
+        to its visible text here, before the caller's length cap, so the cap
+        is spent on words rather than markup.
+        """
         body = ""
 
         if "parts" in payload:
             for part in payload["parts"]:
                 if part["mimeType"] == "text/plain":
                     if "data" in part["body"]:
-                        body = base64.urlsafe_b64decode(part["body"]["data"]).decode(
-                            "utf-8"
-                        )
+                        body = _decode(part["body"]["data"])
                         break
                 elif part["mimeType"] == "text/html" and not body:
                     if "data" in part["body"]:
-                        body = base64.urlsafe_b64decode(part["body"]["data"]).decode(
-                            "utf-8"
-                        )
+                        body = strip_html(_decode(part["body"]["data"]))
         elif "body" in payload and "data" in payload["body"]:
-            body = base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8")
+            body = _decode(payload["body"]["data"])
+            if payload.get("mimeType") == "text/html":
+                body = strip_html(body)
 
         return body
 
