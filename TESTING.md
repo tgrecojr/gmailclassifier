@@ -56,7 +56,7 @@ pytest tests/test_jev_classifier.py::TestSelectLabels::test_falls_back_to_confid
 tests/
 ├── __init__.py
 ├── conftest.py                      # Shared fixtures; points CLASSIFIER_CONFIG_PATH at a throwaway config
-├── test_config.py                   # classifier_config.json validation, LLM_BASE_URL / JEV_* resolution
+├── test_config.py                   # classifier_config.json validation, JEV_* resolution
 ├── test_email_classifier_agent.py   # Agent wiring, labeling, review label, dry run, state and retention
 ├── test_gmail_client.py             # Gmail API client (mocked googleapiclient), HTML fallback stripping
 ├── test_jev_classifier.py           # Request shape, threshold rule, HTTP retries (httpx2.MockTransport)
@@ -69,13 +69,13 @@ CI enforces a **75%** minimum; the suite currently sits around 95%.
 
 What is covered:
 
-- **config.py**: classifier config validation (labels, `label_descriptions`, reserved `None`), `LLM_BASE_URL` defaulting/override/empty handling, `JEV_*` defaults, overrides and range checks, `DRY_RUN`
-- **jev_classifier.py**: decisions URL derivation, request body (one Noul per label, Choice with `None`), state building (URL normalization, HTML stripping, body cap), `select_labels` matrix, retry on timeout/429/5xx, 4xx and malformed bodies yielding `[]`
+- **config.py**: classifier config validation (labels, `label_descriptions`, reserved `None`), `JEV_*` defaults, overrides and range checks, `DRY_RUN`
+- **jev_classifier.py**: request body (one Noul per label, Choice with `None`), state building (URL normalization, HTML stripping, body cap), `select_labels` matrix, retry on timeout/429/5xx, 4xx and malformed bodies yielding `[]`
 - **email_classifier_agent.py**: classifier receives config values, labels applied and archived, review label for unlabeled mail, dry run writes nothing, state persistence and retention pruning, legacy state migration, polling loop
 - **gmail_client.py**: OAuth flow, message fetching, HTML-only body reduction, labelling, inbox removal
 - **llm_utils.py**: URL normalization, HTML detection and reduction, result logging
 
-`main.py`, `setup_token.py`, `verify_setup.py` and `scripts/` are entry points excluded from coverage (see `[tool.coverage.run]` in `pyproject.toml`).
+`main.py`, `setup_token.py` and `verify_setup.py` are entry points excluded from coverage (see `[tool.coverage.run]` in `pyproject.toml`).
 
 ## Test Categories
 
@@ -150,7 +150,7 @@ Common fixtures are defined in `tests/conftest.py`:
 
 ### Mocking External APIs
 
-`JevClassifier` accepts an `httpx2` transport, so tests hand it a `MockTransport` and assert on the exact request LiteLLM/OpenRouter would receive:
+`JevClassifier` accepts an `httpx2` transport, so tests hand it a `MockTransport` and assert on the exact request OpenRouter would receive:
 
 ```python
 import httpx2 as httpx
@@ -196,7 +196,7 @@ Tests that depend on `config.py` module-level values use the `reload_config` fix
 - Other 4xx not retried, yields `[]`
 - Non-JSON or malformed response bodies yield `[]`
 - Agent exceptions leave the email unprocessed (retried next poll)
-- Empty / whitespace `LLM_BASE_URL` falling back to OpenRouter; out-of-range `JEV_*` values fail at startup
+- Out-of-range `JEV_*` values fail at startup
 
 ## Future Testing
 

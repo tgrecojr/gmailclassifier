@@ -15,9 +15,6 @@ Request shape (one call per email, all questions evaluated in parallel):
 Label selection: every Noul at or above ``label_threshold`` is applied. If
 none clears it, the Choice answer is applied when its confidence is at or
 above ``fallback_confidence`` and it is not "None".
-
-The endpoint is normally LiteLLM's built-in OpenRouter pass-through
-(``<litellm>/openrouter/alpha/decisions``); see decisions_url_for().
 """
 
 import logging
@@ -38,8 +35,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "typesafe/jev-1.13"
 OPENROUTER_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions"
-# LiteLLM >= 1.104.0 maps /openrouter/<path> to https://openrouter.ai/api/<path>
-LITELLM_DECISIONS_PATH = "/openrouter/alpha/decisions"
 
 BEST_QUESTION = "best"
 NONE_OPTION = "None"
@@ -52,22 +47,6 @@ _KEY_UNSAFE = re.compile(r"[^A-Za-z0-9_]+")
 
 class JevRequestError(Exception):
     """The decisions endpoint could not be reached or answered unusably."""
-
-
-def decisions_url_for(base_url: str) -> str:
-    """
-    Derive the decisions endpoint from an OpenAI-compatible base URL.
-
-    ``https://openrouter.ai/api/v1``  -> ``https://openrouter.ai/api/alpha/decisions``
-    ``http://litellm:4000/v1``        -> ``http://litellm:4000/openrouter/alpha/decisions``
-    """
-    root = base_url.strip().rstrip("/")
-    if root.endswith("/v1"):
-        root = root[: -len("/v1")]
-    host = urlparse(root).netloc.lower()
-    if host.endswith("openrouter.ai"):
-        return f"{root}/alpha/decisions"
-    return f"{root}{LITELLM_DECISIONS_PATH}"
 
 
 def question_key(label: str) -> str:
