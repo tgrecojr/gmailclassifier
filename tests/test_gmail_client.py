@@ -264,6 +264,7 @@ class TestGetMessageBody:
 
 @pytest.mark.unit
 class TestCreateLabelIfNotExists:
+    # @spec ACTIONS-LABEL-001
     def test_returns_existing_label_id(self, client):
         client.service.users.return_value.labels.return_value.list.return_value.execute.return_value = {
             "labels": [{"id": "L1", "name": "Billing"}]
@@ -272,6 +273,7 @@ class TestCreateLabelIfNotExists:
         # Should not attempt to create when already present
         client.service.users.return_value.labels.return_value.create.assert_not_called()
 
+    # @spec ACTIONS-LABEL-002
     def test_creates_new_label_when_missing(self, client):
         client.service.users.return_value.labels.return_value.list.return_value.execute.return_value = {
             "labels": []
@@ -283,6 +285,7 @@ class TestCreateLabelIfNotExists:
 
         assert client.create_label_if_not_exists("New") == "L99"
 
+    # @spec ACTIONS-LABEL-003
     def test_http_error_returns_none(self, client):
         client.service.users.return_value.labels.return_value.list.return_value.execute.side_effect = (
             _make_http_error()
@@ -292,6 +295,7 @@ class TestCreateLabelIfNotExists:
 
 @pytest.mark.unit
 class TestAddLabelsToMessage:
+    # @spec ACTIONS-MSG-001, ACTIONS-MSG-006
     def test_adds_labels_without_archiving(self, client):
         client.add_labels_to_message("m1", ["L1", "L2"])
 
@@ -301,6 +305,7 @@ class TestAddLabelsToMessage:
         assert kwargs["id"] == "m1"
         assert kwargs["body"] == {"addLabelIds": ["L1", "L2"]}
 
+    # @spec ACTIONS-MSG-002
     def test_adds_labels_and_archives(self, client):
         client.add_labels_to_message("m1", ["L1"], remove_from_inbox=True)
 
@@ -310,41 +315,10 @@ class TestAddLabelsToMessage:
         assert kwargs["body"]["addLabelIds"] == ["L1"]
         assert kwargs["body"]["removeLabelIds"] == ["INBOX"]
 
+    # @spec ACTIONS-MSG-003
     def test_http_error_does_not_raise(self, client):
         client.service.users.return_value.messages.return_value.modify.return_value.execute.side_effect = (
             _make_http_error()
         )
         # Must not raise
         client.add_labels_to_message("m1", ["L1"])
-
-
-@pytest.mark.unit
-class TestMarkAsRead:
-    def test_removes_unread_label(self, client):
-        client.mark_as_read("m1")
-        _, kwargs = (
-            client.service.users.return_value.messages.return_value.modify.call_args
-        )
-        assert kwargs["body"] == {"removeLabelIds": ["UNREAD"]}
-
-    def test_http_error_does_not_raise(self, client):
-        client.service.users.return_value.messages.return_value.modify.return_value.execute.side_effect = (
-            _make_http_error()
-        )
-        client.mark_as_read("m1")
-
-
-@pytest.mark.unit
-class TestArchiveMessage:
-    def test_removes_inbox_label(self, client):
-        client.archive_message("m1")
-        _, kwargs = (
-            client.service.users.return_value.messages.return_value.modify.call_args
-        )
-        assert kwargs["body"] == {"removeLabelIds": ["INBOX"]}
-
-    def test_http_error_does_not_raise(self, client):
-        client.service.users.return_value.messages.return_value.modify.return_value.execute.side_effect = (
-            _make_http_error()
-        )
-        client.archive_message("m1")

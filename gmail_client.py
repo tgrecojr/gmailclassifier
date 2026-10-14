@@ -197,6 +197,7 @@ class GmailClient:
 
         return body
 
+    # @spec ACTIONS-LABEL-001, ACTIONS-LABEL-002, ACTIONS-LABEL-003
     def create_label_if_not_exists(self, label_name: str) -> str:
         """
         Create a Gmail label if it doesn't exist.
@@ -242,6 +243,7 @@ class GmailClient:
             logger.error(f"Error creating label '{label_name}': {error}")
             return None
 
+    # @spec ACTIONS-MSG-001, ACTIONS-MSG-002, ACTIONS-MSG-003, ACTIONS-MSG-006
     def add_labels_to_message(
         self, msg_id: str, label_ids: List[str], remove_from_inbox: bool = False
     ):
@@ -271,30 +273,3 @@ class GmailClient:
 
         except HttpError as error:
             logger.error(f"Error adding labels to message {msg_id}: {error}")
-
-    def mark_as_read(self, msg_id: str):
-        """Mark a message as read."""
-        try:
-            self.service.users().messages().modify(
-                userId="me", id=msg_id, body={"removeLabelIds": ["UNREAD"]}
-            ).execute()
-
-            logger.debug(f"Marked message {msg_id} as read")
-
-        except HttpError as error:
-            logger.error(f"Error marking message {msg_id} as read: {error}")
-
-    def archive_message(self, msg_id: str):
-        """
-        Archive a message by removing it from inbox.
-        The message will still be accessible via its labels and All Mail.
-        """
-        try:
-            self.service.users().messages().modify(
-                userId="me", id=msg_id, body={"removeLabelIds": ["INBOX"]}
-            ).execute()
-
-            logger.debug(f"Archived message {msg_id}")
-
-        except HttpError as error:
-            logger.error(f"Error archiving message {msg_id}: {error}")
