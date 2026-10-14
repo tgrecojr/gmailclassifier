@@ -92,6 +92,19 @@ def mock_classifier():
 class TestEmailClassifierAgentInit:
     """Tests for classifier wiring at agent construction."""
 
+    # @spec AGENT-INIT-001
+    def test_gmail_client_receives_config_values(self, mock_config, mock_classifier):
+        with patch("email_classifier_agent.GmailClient") as mock_cls:
+            EmailClassifierAgent()
+
+        mock_cls.assert_called_once_with(
+            credentials_path="credentials.json",
+            token_path="token.json",
+            scopes=["https://www.googleapis.com/auth/gmail.modify"],
+            headless=True,
+        )
+
+    # @spec AGENT-INIT-002
     def test_classifier_receives_config_values(self, mock_config, mock_gmail_client):
         with patch("email_classifier_agent.JevClassifier") as mock_cls:
             EmailClassifierAgent()
@@ -106,6 +119,7 @@ class TestEmailClassifierAgentInit:
             timeout_seconds=30.0,
         )
 
+    # @spec AGENT-INIT-003
     def test_creates_configured_labels(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -113,6 +127,7 @@ class TestEmailClassifierAgentInit:
         assert agent.label_id_map == {label: f"label_id_{label}" for label in LABELS}
         assert agent.review_label_id is None
 
+    # @spec AGENT-INIT-004
     def test_review_label_created_when_configured(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -124,6 +139,7 @@ class TestEmailClassifierAgentInit:
 
 @pytest.mark.unit
 class TestProcessEmail:
+    # @spec AGENT-PROC-003, AGENT-PROC-007, AGENT-PROC-009, STATE-FILE-001
     def test_applies_labels_archives_and_saves_state(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -143,6 +159,7 @@ class TestProcessEmail:
         assert "test_email_123" in state["processed_emails"]
         assert "pending_retries" not in state
 
+    # @spec AGENT-PROC-007
     def test_keeps_in_inbox_when_remove_disabled(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -152,6 +169,7 @@ class TestProcessEmail:
         kwargs = mock_gmail_client.add_labels_to_message.call_args.kwargs
         assert kwargs["remove_from_inbox"] is False
 
+    # @spec AGENT-PROC-002
     def test_skips_already_processed(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -160,11 +178,13 @@ class TestProcessEmail:
         assert agent.process_email(_email()) is True
         assert mock_classifier.classify_email.call_count == 1
 
+    # @spec AGENT-PROC-001
     def test_missing_id(self, mock_config, mock_gmail_client, mock_classifier):
         agent = EmailClassifierAgent()
         assert agent.process_email({"subject": "x"}) is False
         mock_classifier.classify_email.assert_not_called()
 
+    # @spec AGENT-PROC-006
     def test_no_labels_marks_processed_without_touching_gmail(
         self, mock_config, mock_gmail_client, mock_classifier, caplog
     ):
@@ -181,6 +201,7 @@ class TestProcessEmail:
         assert agent.process_email(_email("e456")) is True
         assert mock_classifier.classify_email.call_count == 1
 
+    # @spec AGENT-PROC-005
     def test_no_labels_applies_review_label_in_inbox(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -195,6 +216,7 @@ class TestProcessEmail:
         )
         assert "e456" in agent.processed_emails
 
+    # @spec AGENT-PROC-008, AGENT-PROC-009
     def test_unknown_label_from_classifier_is_not_applied(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -206,6 +228,7 @@ class TestProcessEmail:
         mock_gmail_client.add_labels_to_message.assert_not_called()
         assert "test_email_123" in agent.processed_emails
 
+    # @spec AGENT-PROC-010
     def test_exception_does_not_save_state(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -218,6 +241,7 @@ class TestProcessEmail:
 
 @pytest.mark.unit
 class TestDryRun:
+    # @spec AGENT-PROC-004, AGENT-INIT-005, STATE-FILE-008
     def test_dry_run_never_writes_to_gmail_or_disk(
         self, mock_config, mock_gmail_client, mock_classifier, caplog
     ):
@@ -236,6 +260,7 @@ class TestDryRun:
         assert "DRY RUN: would apply ['AWS', 'Github']" in caplog.text
         assert "DRY RUN: would apply no labels" in caplog.text
 
+    # @spec AGENT-PROC-004
     def test_dry_run_remembers_emails_in_memory_only(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -253,11 +278,13 @@ class TestDryRun:
 class TestStateTracking:
     """Tests for state persistence and retention."""
 
+    # @spec STATE-FILE-002
     def test_load_state_no_file(self, mock_config, mock_gmail_client, mock_classifier):
         agent = EmailClassifierAgent()
         assert agent.processed_emails == {}
         assert agent.state_file == mock_config.STATE_FILE
 
+    # @spec STATE-FILE-003
     def test_load_state_corrupted_file(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -265,6 +292,7 @@ class TestStateTracking:
             f.write("invalid json{{{")
         assert EmailClassifierAgent().processed_emails == {}
 
+    # @spec STATE-FILE-004, STATE-FILE-005
     def test_legacy_list_format_and_pending_retries_are_migrated(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -288,6 +316,7 @@ class TestStateTracking:
         assert "pending_retries" not in state
         assert isinstance(state["processed_emails"], dict)
 
+    # @spec STATE-FILE-006
     def test_save_state_creates_directory(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -299,6 +328,7 @@ class TestStateTracking:
             with open(mock_config.STATE_FILE) as f:
                 assert "email1" in json.load(f)["processed_emails"]
 
+    # @spec STATE-FILE-001, STATE-MARK-002
     def test_state_persists_across_restarts(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -309,6 +339,7 @@ class TestStateTracking:
         assert agent2.process_email(_email("e789")) is True
         assert mock_classifier.classify_email.call_count == 1
 
+    # @spec STATE-RET-001, STATE-MARK-002
     def test_retention_removes_old_entries(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -322,6 +353,7 @@ class TestStateTracking:
 
         assert set(agent.processed_emails) == {"recent"}
 
+    # @spec STATE-RET-002
     def test_retention_disabled_keeps_everything(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -332,6 +364,7 @@ class TestStateTracking:
 
         assert set(EmailClassifierAgent().processed_emails) == {"a", "b"}
 
+    # @spec STATE-RET-001
     def test_periodic_cleanup(self, mock_config, mock_gmail_client, mock_classifier):
         mock_config.STATE_RETENTION_DAYS = 5
         agent = EmailClassifierAgent()
@@ -344,6 +377,46 @@ class TestStateTracking:
 
         assert set(agent.processed_emails) == {"new"}
 
+    # @spec STATE-RET-003, STATE-RET-004
+    def test_unparsable_timestamps_are_dropped_with_a_warning(
+        self, mock_config, mock_gmail_client, mock_classifier, caplog
+    ):
+        caplog.set_level(logging.INFO)
+        mock_config.STATE_RETENTION_DAYS = 30
+        with open(mock_config.STATE_FILE, "w") as f:
+            json.dump(
+                {
+                    "processed_emails": {
+                        "good": datetime.now(UTC).isoformat(),
+                        "garbage": "not-a-timestamp",
+                        "naive": "2026-01-01T00:00:00",
+                    }
+                },
+                f,
+            )
+
+        agent = EmailClassifierAgent()
+
+        assert set(agent.processed_emails) == {"good"}
+        assert "garbage" in caplog.text
+        assert "naive" in caplog.text
+        assert "Removed 2 email(s) older than 30 days" in caplog.text
+
+    # @spec STATE-FILE-007
+    def test_unwritable_state_file_is_logged_not_raised(
+        self, mock_config, mock_gmail_client, mock_classifier, caplog
+    ):
+        caplog.set_level(logging.ERROR)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # a directory where the file should be: open() for writing fails
+            mock_config.STATE_FILE = tmpdir
+            agent = EmailClassifierAgent()
+            agent.process_email(_email("e1"))
+
+        assert "e1" in agent.processed_emails
+        assert "Error saving state file" in caplog.text
+
+    # @spec STATE-MARK-001
     def test_processed_timestamp_is_recent(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -355,7 +428,7 @@ class TestStateTracking:
 
 @pytest.mark.unit
 class TestRunContinuous:
-    # @spec AGENT-LOOP-001, AGENT-LOOP-004
+    # @spec AGENT-LOOP-001, AGENT-LOOP-004, STATE-RET-005
     def test_one_poll_processes_then_stops_on_interrupt(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -363,10 +436,14 @@ class TestRunContinuous:
         mock_config.MAX_EMAILS_PER_POLL = 10
         mock_gmail_client.get_unread_messages.return_value = [_email("a"), _email("b")]
         agent = EmailClassifierAgent()
+        agent.processed_emails["stale"] = (
+            datetime.now(UTC) - timedelta(days=40)
+        ).isoformat()
 
         with patch("email_classifier_agent.time.sleep", side_effect=KeyboardInterrupt):
             agent.run_continuous()
 
+        # the stale entry was pruned at the top of the cycle, then a and b were added
         assert set(agent.processed_emails) == {"a", "b"}
         mock_gmail_client.get_unread_messages.assert_called_once_with(max_results=10)
 

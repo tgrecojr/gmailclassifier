@@ -49,11 +49,13 @@ class JevRequestError(Exception):
     """The decisions endpoint could not be reached or answered unusably."""
 
 
+# @spec DECISION-REQ-008
 def question_key(label: str) -> str:
     """Question id for a label's Noul. Ids are never shown to the model."""
     return "is_" + _KEY_UNSAFE.sub("_", label)
 
 
+# @spec DECISION-REQ-001, DECISION-REQ-002, DECISION-REQ-003, DECISION-REQ-004, DECISION-REQ-005
 def build_state(email: dict) -> dict:
     """
     The email as a named-field object. HTML bodies are reduced to text, URLs
@@ -71,6 +73,7 @@ def build_state(email: dict) -> dict:
     }
 
 
+# @spec DECISION-REQ-006, DECISION-REQ-007
 def build_questions(labels: list[str], descriptions: dict[str, str]) -> dict:
     """One Noul per label plus a Choice with a 'None' escape hatch."""
     questions = {}
@@ -97,6 +100,7 @@ def _probability(value) -> float | None:
     return float(value) if isinstance(value, (int, float)) else None
 
 
+# @spec DECISION-SEL-001, DECISION-SEL-002, DECISION-SEL-003, DECISION-SEL-004
 def select_labels(
     answers: dict,
     labels: list[str],
@@ -127,6 +131,7 @@ def select_labels(
     return []
 
 
+# @spec DECISION-CFG-001, DECISION-CFG-002, DECISION-CFG-003, DECISION-CFG-004
 def validate_labels(labels: list[str], descriptions: dict[str, str]) -> None:
     """Fail fast on configs Jev cannot represent unambiguously."""
     if not labels:
@@ -144,6 +149,7 @@ def validate_labels(labels: list[str], descriptions: dict[str, str]) -> None:
 class JevClassifier:
     """Classify emails with Jev through the OpenRouter decisions endpoint."""
 
+    # @spec DECISION-CFG-005, DECISION-SEL-005, DECISION-HTTP-001, DECISION-HTTP-009, DECISION-REQ-009
     def __init__(
         self,
         api_key: str,
@@ -180,6 +186,7 @@ class JevClassifier:
             f"label_threshold: {label_threshold}, fallback_confidence: {fallback_confidence})"
         )
 
+    # @spec DECISION-HTTP-002, DECISION-HTTP-003, DECISION-HTTP-004
     def _post(self, payload: dict) -> httpx.Response:
         """POST with one retry on transport errors and retryable statuses."""
         for attempt in range(1, MAX_ATTEMPTS + 1):
@@ -204,6 +211,7 @@ class JevClassifier:
             return response
         raise JevRequestError("exhausted attempts")  # pragma: no cover
 
+    # @spec DECISION-REQ-009, DECISION-HTTP-005, DECISION-HTTP-006, DECISION-HTTP-007
     def decide(self, email: dict) -> dict:
         """
         Run the questions against one email and return the raw ``answers``
@@ -232,6 +240,7 @@ class JevClassifier:
         )
         return answers
 
+    # @spec DECISION-HTTP-008, DECISION-SEL-005
     def classify_email(self, email: dict) -> list[str]:
         """Return the labels to apply; failures are logged and yield []."""
         try:

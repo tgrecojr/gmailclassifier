@@ -36,6 +36,7 @@ def client():
 class TestAuthenticate:
     """Test OAuth/token handling in _authenticate."""
 
+    # @spec INTAKE-AUTH-001
     def test_uses_existing_valid_token(self):
         creds = MagicMock()
         creds.valid = True
@@ -53,6 +54,7 @@ class TestAuthenticate:
         assert c.service == "gmail-service"
         mock_build.assert_called_once_with("gmail", "v1", credentials=creds)
 
+    # @spec INTAKE-AUTH-002, INTAKE-AUTH-005
     def test_refreshes_expired_token(self):
         creds = MagicMock()
         creds.valid = False
@@ -70,6 +72,7 @@ class TestAuthenticate:
 
         creds.refresh.assert_called_once()
 
+    # @spec INTAKE-AUTH-003, INTAKE-AUTH-005
     def test_runs_oauth_flow_when_no_token(self):
         new_creds = MagicMock()
 
@@ -90,6 +93,7 @@ class TestAuthenticate:
         # Credentials get persisted
         assert mock_dump.called
 
+    # @spec INTAKE-AUTH-004
     def test_headless_mode_uses_console_flow(self):
         new_creds = MagicMock()
 
@@ -111,6 +115,7 @@ class TestAuthenticate:
 
 @pytest.mark.unit
 class TestGetUnreadMessages:
+    # @spec INTAKE-FETCH-001, INTAKE-FETCH-002
     def test_returns_detailed_messages(self, client):
         client.service.users.return_value.messages.return_value.list.return_value.execute.return_value = {
             "messages": [{"id": "m1"}, {"id": "m2"}]
@@ -124,12 +129,14 @@ class TestGetUnreadMessages:
 
         assert [m["id"] for m in result] == ["m1", "m2"]
 
+    # @spec INTAKE-FETCH-001
     def test_returns_empty_list_when_no_messages(self, client):
         client.service.users.return_value.messages.return_value.list.return_value.execute.return_value = (
             {}
         )
         assert client.get_unread_messages() == []
 
+    # @spec INTAKE-FETCH-005
     def test_skips_messages_whose_details_fail(self, client):
         client.service.users.return_value.messages.return_value.list.return_value.execute.return_value = {
             "messages": [{"id": "m1"}, {"id": "m2"}]
@@ -141,6 +148,7 @@ class TestGetUnreadMessages:
 
         assert [m["id"] for m in result] == ["m1"]
 
+    # @spec INTAKE-FETCH-006
     def test_http_error_returns_empty_list(self, client):
         client.service.users.return_value.messages.return_value.list.return_value.execute.side_effect = (
             _make_http_error()
@@ -159,6 +167,7 @@ class TestGetMessageDetails:
             "snippet": "snip",
         }
 
+    # @spec INTAKE-FETCH-002
     def test_extracts_headers_and_body(self, client):
         message = self._payload_with_headers(
             [
@@ -180,6 +189,7 @@ class TestGetMessageDetails:
         assert result["body"] == "hello"
         assert result["snippet"] == "snip"
 
+    # @spec INTAKE-FETCH-003
     def test_fills_defaults_when_headers_missing(self, client):
         client.service.users.return_value.messages.return_value.get.return_value.execute.return_value = self._payload_with_headers(
             []
@@ -190,12 +200,14 @@ class TestGetMessageDetails:
         assert result["from"] == "Unknown"
         assert result["date"] == "Unknown"
 
+    # @spec INTAKE-FETCH-003
     def test_header_matching_is_case_insensitive(self, client):
         client.service.users.return_value.messages.return_value.get.return_value.execute.return_value = self._payload_with_headers(
             [{"name": "subject", "value": "Lower"}]
         )
         assert client._get_message_details("m1")["subject"] == "Lower"
 
+    # @spec INTAKE-FETCH-004
     def test_body_truncated_to_5000_chars(self, client):
         long_text = "x" * 6000
         client.service.users.return_value.messages.return_value.get.return_value.execute.return_value = {
@@ -204,6 +216,7 @@ class TestGetMessageDetails:
         }
         assert len(client._get_message_details("m1")["body"]) == 5000
 
+    # @spec INTAKE-FETCH-004
     def test_tracking_urls_normalized_before_truncation(self, client):
         """Link-heavy bodies keep their real text: URLs shrink before the 5000 cut."""
         tracking = "https://click.example.com/ls/click?upn=" + "A" * 5500
@@ -217,6 +230,7 @@ class TestGetMessageDetails:
 
         assert body == "Visit https://click.example.com for the footer text"
 
+    # @spec INTAKE-FETCH-005
     def test_http_error_returns_none(self, client):
         client.service.users.return_value.messages.return_value.get.return_value.execute.side_effect = (
             _make_http_error()
@@ -226,6 +240,7 @@ class TestGetMessageDetails:
 
 @pytest.mark.unit
 class TestGetMessageBody:
+    # @spec INTAKE-BODY-001
     def test_prefers_text_plain_part(self, client):
         payload = {
             "parts": [
@@ -235,6 +250,7 @@ class TestGetMessageBody:
         }
         assert client._get_message_body(payload) == "plain-body"
 
+    # @spec INTAKE-BODY-002
     def test_falls_back_to_text_html_when_no_plain_and_strips_markup(self, client):
         payload = {
             "parts": [
@@ -246,17 +262,21 @@ class TestGetMessageBody:
         }
         assert client._get_message_body(payload) == "Order & ship"
 
+    # @spec INTAKE-BODY-003
     def test_html_only_direct_body_is_stripped(self, client):
         payload = {"mimeType": "text/html", "body": {"data": _b64("<div>Hi</div>")}}
         assert client._get_message_body(payload) == "Hi"
 
+    # @spec INTAKE-BODY-003, INTAKE-BODY-005
     def test_uses_direct_body_when_no_parts(self, client):
         payload = {"body": {"data": _b64("direct")}}
         assert client._get_message_body(payload) == "direct"
 
+    # @spec INTAKE-BODY-004
     def test_returns_empty_when_no_body(self, client):
         assert client._get_message_body({}) == ""
 
+    # @spec INTAKE-BODY-004
     def test_returns_empty_when_part_has_no_data(self, client):
         payload = {"parts": [{"mimeType": "text/plain", "body": {}}]}
         assert client._get_message_body(payload) == ""

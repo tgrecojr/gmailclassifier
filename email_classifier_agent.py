@@ -17,6 +17,7 @@ MAX_BACKOFF_MULTIPLIER = 10
 class EmailClassifierAgent:
     """Main agent for classifying and labeling Gmail emails."""
 
+    # @spec AGENT-INIT-001, AGENT-INIT-002, AGENT-INIT-003, AGENT-INIT-004, AGENT-INIT-006
     def __init__(self):
         """Initialize the email classifier agent."""
         self.dry_run = config.DRY_RUN
@@ -63,6 +64,7 @@ class EmailClassifierAgent:
             f"(retention: {self.retention_days} days)"
         )
 
+    # @spec AGENT-INIT-003, AGENT-INIT-005
     def _initialize_labels(self) -> dict[str, str]:
         """
         Create Gmail labels for all configured labels.
@@ -83,6 +85,7 @@ class EmailClassifierAgent:
         logger.info(f"Initialized {len(label_map)} Gmail labels")
         return label_map
 
+    # @spec STATE-MARK-002
     def _load_state(self) -> dict[str, str]:
         """
         Load processed email IDs from the state file, applying retention cleanup.
@@ -97,6 +100,7 @@ class EmailClassifierAgent:
         )
         return processed_emails
 
+    # @spec STATE-RET-002
     def _cleanup_old_state(self, processed_emails: dict[str, str]) -> dict[str, str]:
         """
         Remove processed entries older than the retention period.
@@ -110,16 +114,20 @@ class EmailClassifierAgent:
             processed_emails, cutoff, self.retention_days
         )
 
+    # @spec STATE-FILE-008
     def _save_state(self):
         """Persist processed email IDs (never in dry run)."""
         if self.dry_run:
             return
         state_store.save_state(self.state_file, self.processed_emails)
 
+    # @spec STATE-MARK-001
     def _mark_processed(self, email_id: str) -> None:
         self.processed_emails[email_id] = datetime.now(UTC).isoformat()
         self._save_state()
 
+    # @spec AGENT-PROC-001, AGENT-PROC-002, AGENT-PROC-003, AGENT-PROC-004,
+    # @spec AGENT-PROC-007, AGENT-PROC-008, AGENT-PROC-009, AGENT-PROC-010
     def process_email(self, email: dict) -> bool:
         """
         Process a single email: classify it and apply labels.
@@ -191,6 +199,7 @@ class EmailClassifierAgent:
             logger.error(f"Error processing email {email.get('id', 'unknown')}: {e}")
             return False
 
+    # @spec AGENT-PROC-005, AGENT-PROC-006
     def _handle_unlabeled(self, email: dict) -> None:
         """
         No label cleared either threshold (or the request failed). The email
@@ -221,6 +230,7 @@ class EmailClassifierAgent:
         multiplier = min(2 ** (consecutive_failures - 1), MAX_BACKOFF_MULTIPLIER)
         return interval * multiplier
 
+    # @spec STATE-RET-005
     def _poll_once(self) -> None:
         """One poll cycle: prune state, fetch unread mail, process each email."""
         logger.info("=== Checking for new emails ===")

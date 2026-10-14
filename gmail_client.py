@@ -13,6 +13,7 @@ from llm_utils import normalize_urls, strip_html
 logger = logging.getLogger(__name__)
 
 
+# @spec INTAKE-BODY-005
 def _decode(data: str) -> str:
     return base64.urlsafe_b64decode(data).decode("utf-8")
 
@@ -34,6 +35,7 @@ class GmailClient:
         self.service = None
         self._authenticate()
 
+    # @spec INTAKE-AUTH-001, INTAKE-AUTH-002, INTAKE-AUTH-003, INTAKE-AUTH-004, INTAKE-AUTH-005
     def _authenticate(self):
         """Authenticate and build Gmail service."""
         creds = None
@@ -68,6 +70,7 @@ class GmailClient:
         self.service = build("gmail", "v1", credentials=creds)
         logger.info("Gmail API authentication successful")
 
+    # @spec INTAKE-AUTH-004
     def _run_console_flow(self, flow):
         """
         Run OAuth flow in console/headless mode.
@@ -93,6 +96,7 @@ class GmailClient:
 
         return flow.credentials
 
+    # @spec INTAKE-FETCH-001, INTAKE-FETCH-002, INTAKE-FETCH-005, INTAKE-FETCH-006
     def get_unread_messages(self, max_results: int = 10) -> List[Dict]:
         """
         Get unread messages from inbox.
@@ -132,6 +136,7 @@ class GmailClient:
             logger.error(f"An error occurred: {error}")
             return []
 
+    # @spec INTAKE-FETCH-002, INTAKE-FETCH-003, INTAKE-FETCH-004, INTAKE-FETCH-005
     def _get_message_details(self, msg_id: str) -> Optional[Dict]:
         """Get detailed information about a specific message."""
         try:
@@ -171,6 +176,7 @@ class GmailClient:
             logger.error(f"Error getting message details for {msg_id}: {error}")
             return None
 
+    # @spec INTAKE-BODY-001, INTAKE-BODY-002, INTAKE-BODY-003, INTAKE-BODY-004
     def _get_message_body(self, payload: Dict) -> str:
         """
         Extract message body from payload.

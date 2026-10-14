@@ -21,6 +21,7 @@ from llm_utils import (
 class TestNormalizeUrls:
     """Test URL reduction to scheme + host."""
 
+    # @spec INTAKE-TEXT-001
     def test_strips_tracking_path_and_query(self):
         text = (
             "Shop now: https://click.mailer.example.com/ls/click?upn="
@@ -31,17 +32,20 @@ class TestNormalizeUrls:
             "Shop now: https://click.mailer.example.com today"
         )
 
+    # @spec INTAKE-TEXT-001
     def test_preserves_scheme_and_port(self):
         assert normalize_urls("see http://host.lan:8080/path?x=1") == (
             "see http://host.lan:8080"
         )
 
+    # @spec INTAKE-TEXT-001
     def test_strips_query_directly_after_host(self):
         assert normalize_urls("https://t.example.com?u=abc123") == (
             "https://t.example.com"
         )
         assert normalize_urls("https://t.example.com#frag") == ("https://t.example.com")
 
+    # @spec INTAKE-TEXT-002
     def test_stops_at_closing_delimiters(self):
         text = "(https://a.example.com/x/y) <https://b.example.com/z> [https://c.example.com/q]"
 
@@ -49,6 +53,7 @@ class TestNormalizeUrls:
             "(https://a.example.com) <https://b.example.com> [https://c.example.com]"
         )
 
+    # @spec INTAKE-TEXT-001
     def test_multiple_urls_and_plain_text_untouched(self):
         text = (
             "Hello https://one.example.com/aaa and https://two.example.com/bbb/ccc\n"
@@ -64,6 +69,7 @@ class TestNormalizeUrls:
         assert normalize_urls("nothing to see here") == "nothing to see here"
         assert normalize_urls("") == ""
 
+    # @spec INTAKE-TEXT-006
     def test_idempotent(self):
         once = normalize_urls("https://x.example.com/a?b=c")
 
@@ -74,6 +80,7 @@ class TestNormalizeUrls:
 class TestLogClassificationResult:
     """Test classification result logging."""
 
+    # @spec DECISION-LOG-001
     def test_log_with_labels(self, caplog):
         """Test logging when labels are predicted."""
         import logging
@@ -91,6 +98,7 @@ class TestLogClassificationResult:
         assert "AWS" in caplog.text
         assert "Finance" in caplog.text
 
+    # @spec DECISION-LOG-001
     def test_log_without_labels(self, caplog):
         """Test logging when no labels are predicted."""
         import logging
@@ -139,11 +147,13 @@ class TestLogClassificationResult:
 class TestStripHtml:
     """HTML bodies are reduced to visible text before reaching the model."""
 
+    # @spec INTAKE-TEXT-004
     def test_detects_html_by_structural_tags(self):
         assert looks_like_html("<html><body><p>Hi</p></body></html>") is True
         assert looks_like_html("Order <b>shipped</b>") is False
         assert looks_like_html("Plain text, 3 < 5 and 7 > 2") is False
 
+    # @spec INTAKE-TEXT-003
     def test_drops_script_style_head_and_comments(self):
         raw = (
             "<html><head><title>T</title><style>p{color:red}</style></head>"
@@ -151,14 +161,17 @@ class TestStripHtml:
         )
         assert strip_html(raw) == "Visible"
 
+    # @spec INTAKE-TEXT-003
     def test_block_closers_become_newlines_and_entities_unescape(self):
         raw = "<div>Line one &amp; more</div><p>Line&nbsp;two</p>Tail<br>End"
         assert strip_html(raw) == "Line one & more\nLine two\nTail\nEnd"
 
+    # @spec INTAKE-TEXT-003
     def test_collapses_whitespace(self):
         raw = "<p>  a   b </p>\n\n\n<p>\t c </p>"
         assert strip_html(raw) == "a b\nc"
 
+    # @spec INTAKE-TEXT-005
     def test_truncated_tag_at_end_does_not_eat_text(self):
         # gmail_client caps bodies at 5000 chars, which can cut mid-tag
         assert strip_html('<p>kept</p><a href="https://x') == 'kept\n<a href="https://x'

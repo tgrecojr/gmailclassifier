@@ -13,6 +13,7 @@ from gmail_client import GmailClient
 import config
 
 
+# @spec INTAKE-AUTH-006, INTAKE-AUTH-007
 def main():
     print("=" * 60)
     print("Gmail Token Generator")

@@ -46,7 +46,7 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 | CFG   | DECISION-CFG-001 to DECISION-CFG-005 | 5 | 0 | 0 |
 | LOG   | DECISION-LOG-001 | 1 | 0 | 0 |
 
-**Summary:** 29 of 29 active specs observed implemented; 0 deferred. No `@spec` annotations exist yet in code or tests. Retry on HTTP 500 and 504 (DECISION-HTTP-003) is implemented but only 429, 502, and 503 are exercised by tests.
+**Summary:** 29 of 29 active specs implemented; 0 deferred. Every spec is cited by `@spec` annotations in code and in at least one test. Retry on HTTP 500 and 504 (DECISION-HTTP-003) is implemented but only 429, 502, and 503 are exercised by tests.
 
 ## Key Findings
 

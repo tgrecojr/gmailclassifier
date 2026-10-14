@@ -48,7 +48,7 @@ Load settings, wire the Gmail client and Jev classifier, poll on an interval, an
 | LOOP  | AGENT-LOOP-001 to AGENT-LOOP-004 | 4 | 0 | 0 |
 | CLI   | AGENT-CLI-001 to AGENT-CLI-003 | 3 | 0 | 0 |
 
-**Summary:** 37 of 37 active specs implemented; 0 deferred. The LOOP specs are annotated in code and tests; CFG, INIT, PROC, and CLI are not yet. No `@spec` annotations exist yet in code or tests. `main.py` is excluded from coverage and the CLI specs have no automated tests.
+**Summary:** 37 of 37 active specs implemented; 0 deferred. All are cited by `@spec` annotations in code. Without a test citation: AGENT-CFG-001, AGENT-CFG-008, AGENT-CFG-012 (import-time behaviors of `config.py`), AGENT-INIT-006 (startup log line), and AGENT-CLI-001 to AGENT-CLI-003 (`main.py`, excluded from coverage). No `@spec` annotations exist yet in code or tests. `main.py` is excluded from coverage and the CLI specs have no automated tests.
 
 ## Key Findings
 

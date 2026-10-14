@@ -42,7 +42,7 @@ Persist the ledger of processed email IDs, migrate older file formats, and prune
 | MARK  | STATE-MARK-001 to STATE-MARK-002 | 2 | 0 | 0 |
 | RET   | STATE-RET-001 to STATE-RET-005 | 5 | 0 | 0 |
 
-**Summary:** 15 of 15 active specs observed implemented; 0 deferred. No `@spec` annotations exist yet in code or tests.
+**Summary:** 15 of 15 active specs implemented; 0 deferred. Every spec is cited by `@spec` annotations in code and in at least one test.
 
 ## Key Findings
 

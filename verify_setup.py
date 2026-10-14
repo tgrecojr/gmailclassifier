@@ -27,6 +27,7 @@ def check_file_exists(filepath: str, name: str) -> bool:
         return False
 
 
+# @spec OPS-VERIFY-003
 def check_env_variable(var_name: str) -> bool:
     """Check if an environment variable is set to a non-placeholder value."""
     value = os.getenv(var_name, "").strip()
@@ -38,6 +39,7 @@ def check_env_variable(var_name: str) -> bool:
         return False
 
 
+# @spec OPS-VERIFY-001
 def check_python_version() -> bool:
     """Check Python version."""
     version = sys.version_info
@@ -53,6 +55,7 @@ def check_python_version() -> bool:
         return False
 
 
+# @spec OPS-VERIFY-004
 def check_dependencies() -> bool:
     """Check if required packages are installed."""
     required_packages = [
@@ -75,6 +78,7 @@ def check_dependencies() -> bool:
     return all_installed
 
 
+# @spec OPS-VERIFY-002
 def check_classifier_config(path: str) -> bool:
     """Every label needs a description: Jev only ever sees the descriptions."""
     try:
@@ -101,6 +105,7 @@ def check_classifier_config(path: str) -> bool:
     return True
 
 
+# @spec OPS-VERIFY-005
 def check_jev_endpoint() -> bool:
     """Send one tiny decision (~$0.00002) to prove the key and model work."""
     from jev_classifier import (
@@ -143,6 +148,7 @@ def check_jev_endpoint() -> bool:
     return True
 
 
+# @spec OPS-VERIFY-002, OPS-VERIFY-006
 def main():
     """Run all verification checks."""
     print("=" * 60)

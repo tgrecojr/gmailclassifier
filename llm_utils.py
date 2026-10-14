@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 _URL = re.compile(r"(https?://[^/?#\s)>\]]+)[^\s)>\]]*")
 
 
+# @spec INTAKE-TEXT-001, INTAKE-TEXT-002, INTAKE-TEXT-006
 def normalize_urls(text: str) -> str:
     """
     Reduce every URL in text to scheme + host.
@@ -45,11 +46,13 @@ _HTML_TAG = re.compile(r"<[^>]*>")
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
+# @spec INTAKE-TEXT-004
 def looks_like_html(text: str) -> bool:
     """True if the text contains common HTML structural tags."""
     return bool(_HTML_HINT.search(text))
 
 
+# @spec INTAKE-TEXT-003, INTAKE-TEXT-005
 def strip_html(text: str) -> str:
     """
     Reduce an HTML fragment to its visible text.
@@ -69,6 +72,7 @@ def strip_html(text: str) -> str:
     return text.strip()
 
 
+# @spec DECISION-LOG-001
 def log_classification_result(email: dict, labels: list[str], provider: str):
     """
     Log the classification result in a consistent format.
