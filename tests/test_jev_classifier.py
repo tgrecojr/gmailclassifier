@@ -88,6 +88,7 @@ def _classifier(handler, **overrides):
 
 @pytest.mark.unit
 class TestBuildState:
+    # @spec DECISION-REQ-001, DECISION-REQ-004
     def test_named_fields_with_urls_reduced_to_host(self, email):
         state = build_state(email)
         assert set(state) == {"from", "subject", "date", "body"}
@@ -98,12 +99,21 @@ class TestBuildState:
             == "Your monthly AWS bill is now available at https://console.aws.amazon.com"
         )
 
+    # @spec DECISION-REQ-003
     def test_html_body_is_reduced_to_text(self):
         state = build_state(
             {"body": "<html><body><p>Hello</p><script>x()</script></body></html>"}
         )
         assert state["body"] == "Hello"
 
+    # @spec DECISION-REQ-005
+    def test_missing_fields_get_defaults(self):
+        state = build_state({})
+        assert state["from"] == "Unknown"
+        assert state["subject"] == "No Subject"
+        assert state["date"] == "Unknown"
+
+    # @spec DECISION-REQ-002, DECISION-REQ-004
     def test_body_is_capped_and_snippet_is_fallback(self):
         assert (
             len(build_state({"body": "x" * (BODY_MAX_CHARS + 500)})["body"])
@@ -115,6 +125,7 @@ class TestBuildState:
 
 @pytest.mark.unit
 class TestBuildQuestions:
+    # @spec DECISION-REQ-006, DECISION-REQ-007
     def test_one_noul_per_label_plus_choice_with_none(self):
         questions = build_questions(LABELS, DESCRIPTIONS)
         assert set(questions) == {
@@ -132,6 +143,7 @@ class TestBuildQuestions:
         assert list(best["criteria"]) == LABELS + [NONE_OPTION]
         assert best["criteria"]["Finance"] == DESCRIPTIONS["Finance"]
 
+    # @spec DECISION-REQ-008
     def test_question_key_normalises_unsafe_characters(self):
         assert question_key("Work Stuff") == "is_Work_Stuff"
         assert question_key("AI/ML & Data") == "is_AI_ML_Data"
@@ -142,10 +154,12 @@ class TestValidateLabels:
     def test_accepts_valid_config(self):
         validate_labels(LABELS, DESCRIPTIONS)
 
+    # @spec DECISION-CFG-002
     def test_rejects_missing_description(self):
         with pytest.raises(ValueError, match="missing"):
             validate_labels(LABELS, {"Finance": "x", "Shopping": "y", "Work Stuff": ""})
 
+    # @spec DECISION-CFG-001, DECISION-CFG-003, DECISION-CFG-004
     def test_rejects_reserved_none_label_and_collisions_and_empty(self):
         with pytest.raises(ValueError, match="reserved"):
             validate_labels(["None"], {"None": "x"})
@@ -157,16 +171,19 @@ class TestValidateLabels:
 
 @pytest.mark.unit
 class TestSelectLabels:
+    # @spec DECISION-SEL-001
     def test_every_noul_at_or_above_threshold_in_config_order(self):
         answers = _answers(finance=0.7, shopping=0.71, work=0.69)
         assert select_labels(answers, LABELS, 0.7, 0.5) == ["Finance", "Shopping"]
 
+    # @spec DECISION-SEL-002
     def test_falls_back_to_confident_choice(self):
         answers = _answers(
             finance=0.6, shopping=0.1, work=0.1, choice="Finance", confidence=0.55
         )
         assert select_labels(answers, LABELS, 0.7, 0.5) == ["Finance"]
 
+    # @spec DECISION-SEL-003
     def test_no_label_when_fallback_is_none_or_unconfident_or_unknown(self):
         assert (
             select_labels(
@@ -196,6 +213,7 @@ class TestSelectLabels:
             == []
         )
 
+    # @spec DECISION-SEL-004
     def test_tolerates_missing_or_malformed_answers(self):
         assert select_labels({}, LABELS, 0.7, 0.5) == []
         assert (
@@ -214,6 +232,7 @@ class TestSelectLabels:
 
 @pytest.mark.unit
 class TestJevClassifierHttp:
+    # @spec DECISION-REQ-009, DECISION-HTTP-009
     def test_request_body_and_headers(self, email):
         seen = []
 
@@ -237,6 +256,7 @@ class TestJevClassifierHttp:
         assert body["questions"] == build_questions(LABELS, DESCRIPTIONS)
         assert "messages" not in body
 
+    # @spec DECISION-HTTP-007
     def test_decide_returns_raw_answers_and_logs_usage(self, email, caplog):
         caplog.set_level(logging.DEBUG)
         classifier = _classifier(lambda r: httpx.Response(200, json=_response_body()))
@@ -244,6 +264,12 @@ class TestJevClassifierHttp:
         assert answers["is_Finance"]["noul"] == 0.95
         assert "cost=1.26e-05" in caplog.text
 
+    # @spec DECISION-HTTP-001
+    def test_timeout_from_constructor_is_applied_to_the_client(self):
+        classifier = _classifier(lambda r: httpx.Response(200), timeout_seconds=7.5)
+        assert classifier.client.timeout.read == 7.5
+
+    # @spec DECISION-SEL-005
     def test_thresholds_from_constructor_are_applied(self, email):
         answers = _answers(finance=0.75, shopping=0.72, work=0.1)
         classifier = _classifier(
@@ -252,6 +278,7 @@ class TestJevClassifierHttp:
         )
         assert classifier.classify_email(email) == ["Finance"]
 
+    # @spec DECISION-HTTP-002
     def test_timeout_is_retried_once_then_succeeds(self, email):
         calls = []
 
@@ -264,6 +291,7 @@ class TestJevClassifierHttp:
         assert _classifier(handler).classify_email(email) == ["Finance"]
         assert len(calls) == 2
 
+    # @spec DECISION-HTTP-002, DECISION-HTTP-008
     def test_persistent_timeout_yields_empty(self, email, caplog):
         caplog.set_level(logging.ERROR)
         calls = []
@@ -276,6 +304,7 @@ class TestJevClassifierHttp:
         assert len(calls) == 2
         assert "transport error" in caplog.text
 
+    # @spec DECISION-HTTP-003
     @pytest.mark.parametrize("status", [429, 502, 503])
     def test_retryable_status_is_retried_once(self, email, status):
         calls = []
@@ -289,6 +318,7 @@ class TestJevClassifierHttp:
         assert _classifier(handler).classify_email(email) == ["Finance"]
         assert len(calls) == 2
 
+    # @spec DECISION-HTTP-004, DECISION-HTTP-008
     def test_client_error_is_not_retried_and_raises_from_decide(self, email):
         calls = []
 
@@ -304,6 +334,7 @@ class TestJevClassifierHttp:
         assert classifier.classify_email(email) == []
         assert len(calls) == 2  # one per call, no retry
 
+    # @spec DECISION-HTTP-005, DECISION-HTTP-006
     def test_malformed_bodies_yield_empty(self, email, caplog):
         caplog.set_level(logging.ERROR)
         assert (
@@ -321,6 +352,7 @@ class TestJevClassifierHttp:
         )
         assert "malformed" in caplog.text
 
+    # @spec DECISION-CFG-005
     def test_invalid_label_config_fails_at_construction(self):
         with pytest.raises(ValueError):
             _classifier(

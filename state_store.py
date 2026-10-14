@@ -21,6 +21,7 @@ from typing import Dict
 logger = logging.getLogger(__name__)
 
 
+# @spec STATE-FILE-002, STATE-FILE-003, STATE-FILE-004, STATE-FILE-005
 def load_state(path: str) -> Dict[str, str]:
     """
     Read the state file.
@@ -48,6 +49,7 @@ def load_state(path: str) -> Dict[str, str]:
     return processed_raw if isinstance(processed_raw, dict) else {}
 
 
+# @spec STATE-FILE-001, STATE-FILE-005, STATE-FILE-006, STATE-FILE-007
 def save_state(path: str, processed_emails: Dict[str, str]) -> None:
     """Write the state file, creating its directory if needed. Errors are logged."""
     try:
@@ -62,10 +64,12 @@ def save_state(path: str, processed_emails: Dict[str, str]) -> None:
         logger.error(f"Error saving state file {path}: {e}")
 
 
+# @spec STATE-RET-001
 def retention_cutoff(retention_days: int) -> datetime:
     return datetime.now(timezone.utc) - timedelta(days=retention_days)
 
 
+# @spec STATE-RET-001, STATE-RET-003, STATE-RET-004
 def cleanup_old_entries(
     processed_emails: Dict[str, str], cutoff: datetime, retention_days: int
 ) -> Dict[str, str]:

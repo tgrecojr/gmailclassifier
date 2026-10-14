@@ -46,7 +46,7 @@ Authenticate to Gmail, fetch unread inbox messages, and reduce each one to the t
 | BODY  | INTAKE-BODY-001 to INTAKE-BODY-005 | 5 | 0 | 0 |
 | TEXT  | INTAKE-TEXT-001 to INTAKE-TEXT-006 | 6 | 0 | 0 |
 
-**Summary:** 24 of 24 active specs observed implemented; 0 deferred. No `@spec` annotations exist yet in code or tests; INTAKE-AUTH-006 and INTAKE-AUTH-007 (the token script) have no automated tests.
+**Summary:** 24 of 24 active specs implemented; 0 deferred. All are cited by `@spec` annotations in code. Without a test citation: INTAKE-AUTH-006 and INTAKE-AUTH-007 (`setup_token.py`, excluded from coverage).
 
 ## Key Findings
 

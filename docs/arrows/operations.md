@@ -49,7 +49,7 @@ Verify a deployment's prerequisites, build and publish a signed container image,
 | DEPS   | OPS-DEPS-001 to OPS-DEPS-004 | 4 | 0 | 0 |
 | VERIFY | OPS-VERIFY-001 to OPS-VERIFY-006 | 6 | 0 | 0 |
 
-**Summary:** 25 of 25 active specs implemented; 0 deferred. The Dockerfile, compose file, and all four workflows carry `@spec` comments; `verify_setup.py` does not yet. No `@spec` annotations exist; workflow YAML and Dockerfiles take `# @spec` comments but none are present yet.
+**Summary:** 25 of 25 active specs implemented; 0 deferred. The Dockerfile, compose file, all four workflows, and `verify_setup.py` carry `@spec` comments. OPS-DEPS-002 to OPS-DEPS-004 live in `renovate.json`, which cannot carry comments, and are cited from the LLD only. No operations spec has an automated test: CI, IMAGE, and DEPS specs are exercised by the workflows themselves; VERIFY specs by running the script. No `@spec` annotations exist; workflow YAML and Dockerfiles take `# @spec` comments but none are present yet.
 
 ## Key Findings
 

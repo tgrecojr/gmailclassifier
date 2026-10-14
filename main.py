@@ -16,6 +16,7 @@ from email_classifier_agent import EmailClassifierAgent
 from jev_classifier import OPENROUTER_DECISIONS_URL
 
 
+# @spec AGENT-CLI-001
 def setup_logging(level: str = "INFO"):
     """Configure logging for the application."""
     log_level = getattr(logging, level.upper(), logging.INFO)
@@ -27,6 +28,7 @@ def setup_logging(level: str = "INFO"):
     )
 
 
+# @spec AGENT-CLI-001, AGENT-CLI-002, AGENT-CLI-003
 def main():
     """Main entry point for the email classifier agent."""
     os.environ["ANONYMIZED_TELEMETRY"] = "false"

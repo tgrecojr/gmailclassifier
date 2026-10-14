@@ -26,6 +26,7 @@ def _write(tmp_path, data):
 class TestLoadClassifierConfig:
     """load_classifier_config requires labels and a description per label."""
 
+    # @spec AGENT-CFG-002
     def test_valid_config(self, tmp_path):
         from config import load_classifier_config
 
@@ -33,6 +34,7 @@ class TestLoadClassifierConfig:
         assert result["labels"] == ["Finance", "Shopping"]
         assert result["label_descriptions"]["Finance"] == "Bills and bank statements"
 
+    # @spec AGENT-CFG-007
     def test_legacy_classification_prompt_is_tolerated(self, tmp_path):
         from config import load_classifier_config
 
@@ -40,12 +42,14 @@ class TestLoadClassifierConfig:
         result = load_classifier_config(_write(tmp_path, legacy))
         assert result["labels"] == ["Finance", "Shopping"]
 
+    # @spec AGENT-CFG-003
     def test_missing_file(self):
         from config import load_classifier_config
 
         with pytest.raises(FileNotFoundError, match="classifier_config.example.json"):
             load_classifier_config("nonexistent_file.json")
 
+    # @spec AGENT-CFG-004
     def test_invalid_json(self, tmp_path):
         from config import load_classifier_config
 
@@ -66,6 +70,7 @@ class TestLoadClassifierConfig:
             ({"labels": ["None"], "label_descriptions": {"None": "x"}}, "reserved"),
         ],
     )
+    # @spec AGENT-CFG-005, AGENT-CFG-006
     def test_rejects_invalid_shapes(self, tmp_path, data, message):
         from config import load_classifier_config
 
@@ -109,6 +114,7 @@ def reload_config(monkeypatch):
 class TestJevSettings:
     """Jev model, thresholds and dry-run flags."""
 
+    # @spec AGENT-CFG-009, AGENT-CFG-011, AGENT-CFG-013, AGENT-CFG-014
     def test_defaults(self, reload_config):
         config = reload_config()
         assert config.JEV_MODEL == "typesafe/jev-1.13"
@@ -124,6 +130,7 @@ class TestJevSettings:
         config = reload_config(OPENROUTER_API_KEY="sk-or-v1-test")
         assert config.OPENROUTER_API_KEY == "sk-or-v1-test"
 
+    # @spec AGENT-CFG-009, AGENT-CFG-011, AGENT-CFG-013
     def test_overrides(self, reload_config):
         config = reload_config(
             JEV_MODEL="typesafe/jev-1.14",
@@ -148,6 +155,7 @@ class TestJevSettings:
             {"JEV_TIMEOUT_SECONDS": "0"},
         ],
     )
+    # @spec AGENT-CFG-010
     def test_out_of_range_values_fail_fast(self, reload_config, env):
         with pytest.raises(ValueError, match="must be between"):
             reload_config(**env)

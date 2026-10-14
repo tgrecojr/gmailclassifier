@@ -6,9 +6,11 @@ from dotenv import load_dotenv
 
 from jev_classifier import DEFAULT_MODEL, validate_labels
 
+# @spec AGENT-CFG-001
 load_dotenv()
 
 
+# @spec AGENT-CFG-002, AGENT-CFG-003, AGENT-CFG-004, AGENT-CFG-005, AGENT-CFG-006, AGENT-CFG-007
 def load_classifier_config(config_path: str) -> dict:
     """
     Load classifier configuration from JSON file.
@@ -58,6 +60,7 @@ def load_classifier_config(config_path: str) -> dict:
     return config
 
 
+# @spec AGENT-CFG-010
 def _float_env(name: str, default: float, low: float, high: float) -> float:
     value = float(os.getenv(name, str(default)))
     if not low <= value <= high:
@@ -66,6 +69,7 @@ def _float_env(name: str, default: float, low: float, high: float) -> float:
 
 
 # Classifier Configuration
+# @spec AGENT-CFG-002, AGENT-CFG-008
 CLASSIFIER_CONFIG_PATH = os.getenv("CLASSIFIER_CONFIG_PATH", "classifier_config.json")
 
 try:
@@ -83,6 +87,7 @@ except (FileNotFoundError, ValueError) as e:
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # Jev (TypeSafe decisions model) Configuration
+# @spec AGENT-CFG-009, AGENT-CFG-010, AGENT-CFG-011
 JEV_MODEL = os.getenv("JEV_MODEL", "").strip() or DEFAULT_MODEL
 # A label is applied when its yes/no probability reaches JEV_LABEL_THRESHOLD.
 # If none does, the single best label is applied when the model's confidence
@@ -95,6 +100,7 @@ JEV_TIMEOUT_SECONDS = _float_env("JEV_TIMEOUT_SECONDS", 30.0, 1.0, 600.0)
 JEV_REVIEW_LABEL = os.getenv("JEV_REVIEW_LABEL", "").strip()
 
 # Gmail Configuration
+# @spec AGENT-CFG-012, AGENT-CFG-013
 GMAIL_CREDENTIALS_PATH = os.getenv("GMAIL_CREDENTIALS_PATH", "credentials.json")
 GMAIL_TOKEN_PATH = os.getenv("GMAIL_TOKEN_PATH", "token.json")
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
@@ -102,6 +108,7 @@ GMAIL_HEADLESS_MODE = os.getenv("GMAIL_HEADLESS_MODE", "false").lower() == "true
 REMOVE_FROM_INBOX = os.getenv("REMOVE_FROM_INBOX", "true").lower() == "true"
 
 # Application Configuration
+# @spec AGENT-CFG-013, AGENT-CFG-014
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "60"))
 MAX_EMAILS_PER_POLL = int(os.getenv("MAX_EMAILS_PER_POLL", "10"))
 STATE_FILE = os.getenv("STATE_FILE", ".email_state.json")
