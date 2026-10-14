@@ -108,7 +108,7 @@ The boolean return feeds the poll summary. It is `True` for "labeled" and "alrea
 3. If none, log at DEBUG. Otherwise call `process_email` on each and log how many returned `True` out of how many were fetched.
 4. Sleep `POLL_INTERVAL_SECONDS`.
 
-Any exception escaping a cycle is logged at ERROR and followed by a sleep before the next cycle. The intended sleep backs off exponentially across consecutive failed cycles, doubling from the poll interval up to ten times the interval and resetting after a successful cycle. The current code sleeps the flat poll interval every time; the backoff is not yet implemented. `KeyboardInterrupt` breaks the loop and logs that the agent stopped. No other signal is handled; SIGTERM terminates the process immediately.
+Any exception escaping a cycle is logged at ERROR and followed by a sleep before the next cycle. The sleep backs off exponentially across consecutive failed cycles: the poll interval, doubled per further failure, capped at ten times the interval (`MAX_BACKOFF_MULTIPLIER`), and reset to the plain interval after a cycle completes. One cycle (prune, fetch, process, log) is `_poll_once`; `run_continuous` owns the sleep and failure count. `KeyboardInterrupt` breaks the loop and logs that the agent stopped. No other signal is handled; SIGTERM terminates the process immediately.
 
 The ledger is consulted inside `process_email`, after gmail-intake has already fetched the full message. Messages that remain unread in the inbox after processing are re-downloaded on every poll in which they appear in the list window.
 
@@ -136,7 +136,7 @@ The ledger is consulted inside `process_email`, after gmail-intake has already f
 | Float setting ranges | Thresholds in [0, 1], timeout in [1, 600], checked at import | Accept any float; clamp silently | A threshold outside [0, 1] can never fire or always fires; failing at startup with the range in the message is clearer than odd behavior later (`tests/test_config.py::test_out_of_range_values_fail_fast`). |
 | Gmail scope | `gmail.modify` only, fixed | `gmail.readonly` plus `gmail.labels`; full `mail.google.com`; configurable | `modify` is the narrowest scope that can both read messages and change their labels; making it configurable invites broader grants by mistake. |
 | Label creation timing | All configured labels ensured at startup, ids cached for the process | Create on first use; look up on every write | Labels are created at startup if missing (README "Workflow"); a cached map makes the per-email path one `modify` call with no lookups. |
-| Error backoff in the loop | Exponential backoff on consecutive failed cycles: the sleep doubles from the poll interval up to ten times the interval, and resets after a successful cycle | Sleep the normal interval every time (today's code); immediate retry | A failing dependency (Gmail or OpenRouter down) should be hit less often the longer it stays down, not every interval. Ten times the interval caps the wait at ten minutes with the default 60-second poll. The code still sleeps a flat interval; the change is pending (AGENT-LOOP-003 is an active gap). |
+| Error backoff in the loop | Exponential backoff on consecutive failed cycles: the sleep doubles from the poll interval up to ten times the interval, and resets after a successful cycle | Sleep the normal interval every time (today's code); immediate retry | A failing dependency (Gmail or OpenRouter down) should be hit less often the longer it stays down, not every interval. Ten times the interval caps the wait at ten minutes with the default 60-second poll. |
 | Logging destination | stdout, configurable level, CLI flag over environment | File logging; structured JSON | Logs are written to the console so containers and systemd capture them natively (README "Logging"). |
 | Concurrency | One synchronous loop, one instance | Threads per message; multiple replicas | Multiple instances would race on the same unread mail and the ledger; raise `MAX_EMAILS_PER_POLL` instead (DEPLOYMENT "Scaling Considerations"). |
 | Boolean parsing | Only the literal `true` (any case) is true | Accept `1`, `yes`, `on`; strict `true`/`false` with error | Not a deliberate choice; the first implementation stuck. The cost is that `yes` or `1` is silently false. Whether to widen or to reject unknown values is Deferred 8. |
@@ -148,7 +148,7 @@ The ledger is consulted inside `process_email`, after gmail-intake has already f
 
 ### Deferred
 1. Should `process_email` return "handled" consistently, or should the loop report counts by outcome (labeled, review, skipped, failed)?
-2. Handle SIGTERM so `docker stop` ends the loop gracefully instead of killing the process mid-write.
+2. Handle SIGTERM so `docker stop` ends the loop gracefully instead of killing the process mid-write. Related: a keyboard interrupt that arrives during the failure-path sleep escapes `run_continuous` (the handler is outside its own `except`), so `main` ends the process without the loop's own "stopped" log; exit status is still 0.
 3. Check the ledger before downloading full message bodies. Requires gmail-intake to expose listed ids before fetching details (cascades into gmail-intake).
 4. Detect a missing or empty `OPENROUTER_API_KEY` at startup, before Gmail authentication, instead of on the first email.
 5. Remove the `ANONYMIZED_TELEMETRY` assignment in `main.py`.

@@ -70,7 +70,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: agent-runtime.md
-    next: "Add @spec annotations to email_classifier_agent.py, config.py, main.py and tests; implement exponential backoff on failed poll cycles (AGENT-LOOP-003); add SIGTERM handling."
+    next: "Add @spec annotations to the CFG, INIT, PROC and CLI entry points and tests; add SIGTERM handling."
     drift: null
 
   operations:

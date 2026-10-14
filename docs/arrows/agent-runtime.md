@@ -35,7 +35,7 @@ Load settings, wire the Gmail client and Jev classifier, poll on an interval, an
 1. `config.py` — reads the environment file and `classifier_config.json` at import, validates shapes and ranges, and exposes module-level constants. A bad config stops the process before anything else runs.
 2. `EmailClassifierAgent.__init__` — constructs the Gmail client (which authenticates), the Jev classifier, ensures Gmail labels exist, and loads the ledger.
 3. `process_email` — the per-email policy: skip if in ledger; classify; dry-run short-circuit; unlabeled path; label and archive; mark processed.
-4. `run_continuous` — the poll loop: prune ledger, fetch, process, sleep; survives any exception by sleeping and retrying.
+4. `run_continuous` / `_poll_once` — the poll loop: prune ledger, fetch, process, sleep; survives any exception by sleeping with exponential backoff and retrying.
 5. `main.py` — CLI flag for log level, stdout logging, startup banner, exit codes.
 
 ## Spec Coverage
@@ -45,10 +45,10 @@ Load settings, wire the Gmail client and Jev classifier, poll on an interval, an
 | CFG   | AGENT-CFG-001 to AGENT-CFG-014 | 14 | 0 | 0 |
 | INIT  | AGENT-INIT-001 to AGENT-INIT-006 | 6 | 0 | 0 |
 | PROC  | AGENT-PROC-001 to AGENT-PROC-010 | 10 | 0 | 0 |
-| LOOP  | AGENT-LOOP-001 to AGENT-LOOP-004 | 3 | 0 | 1 |
+| LOOP  | AGENT-LOOP-001 to AGENT-LOOP-004 | 4 | 0 | 0 |
 | CLI   | AGENT-CLI-001 to AGENT-CLI-003 | 3 | 0 | 0 |
 
-**Summary:** 36 of 37 active specs observed implemented; 0 deferred; 1 gap (AGENT-LOOP-003, exponential backoff on failed cycles). No `@spec` annotations exist yet in code or tests. `main.py` is excluded from coverage and the CLI specs have no automated tests.
+**Summary:** 37 of 37 active specs implemented; 0 deferred. The LOOP specs are annotated in code and tests; CFG, INIT, PROC, and CLI are not yet. No `@spec` annotations exist yet in code or tests. `main.py` is excluded from coverage and the CLI specs have no automated tests.
 
 ## Key Findings
 
@@ -68,8 +68,7 @@ Load settings, wire the Gmail client and Jev classifier, poll on an interval, an
 _None identified during mapping._
 
 ### Should Fix
-1. Implement exponential backoff on consecutive failed poll cycles (AGENT-LOOP-003): double from the poll interval up to ten times it, reset on success.
-2. Handle SIGTERM so container stops are graceful (finding 4).
+1. Handle SIGTERM so container stops are graceful (finding 4).
 
 ### Nice to Have
 2. Make `process_email`'s return value mean "handled" consistently, or report counts by outcome (finding 2).
