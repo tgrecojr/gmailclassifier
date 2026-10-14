@@ -34,7 +34,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: jev-decision.md
-    next: "Add @spec annotations to jev_classifier.py, llm_utils.py:72-87 and tests; correct the README's 'never sees label names' claim (doc-only)."
+    next: "Add @spec annotations to jev_classifier.py, llm_utils.py:72-87 and tests."
     drift: null
 
   gmail-actions:
@@ -82,7 +82,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: operations.md
-    next: "Add @spec comments to the Dockerfile, workflows, and verify_setup.py; raise coverage floor to 90% (OPS-CI-002), drop arm64 (OPS-CI-006), build on PRs (OPS-CI-009); decide on a container health signal (cascades into agent-runtime)."
+    next: "Add @spec comments to verify_setup.py; decide on a container health signal (cascades into agent-runtime)."
     drift: null
 
 unmapped:

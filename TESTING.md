@@ -65,7 +65,7 @@ tests/
 
 ## Test Coverage
 
-CI enforces a **75%** minimum; the suite currently sits around 95%.
+CI enforces a **90%** minimum; the suite currently sits around 95%.
 
 What is covered:
 
@@ -110,7 +110,8 @@ See `.github/workflows/test.yml` for CI configuration.
 - Executes all unit tests
 - Generates coverage reports
 - Uploads coverage to Codecov
-- Enforces 75% coverage threshold
+- Enforces 90% coverage threshold
+- Builds the Docker image for amd64 without pushing
 - Runs linting (flake8, black)
 
 ## Writing New Tests
