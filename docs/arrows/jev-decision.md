@@ -19,11 +19,9 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 
 ### Tests
 - tests/test_jev_classifier.py (all classes)
-- tests/test_llm_utils.py (`TestLogClassificationResult`)
 
 ### Code
 - jev_classifier.py (all)
-- llm_utils.py:76-91 (`log_classification_result`, called only from this segment)
 
 ## Architecture
 

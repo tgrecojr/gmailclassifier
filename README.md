@@ -174,24 +174,18 @@ Follow the prompts to authorize the application to access your Gmail account. Th
 
 #### Headless Mode (for Servers/Docker)
 
-For deployment on servers or in Docker without a browser:
+For deployment on servers or in Docker without a browser, mint the token on a machine that has one and copy it over:
 
-1. Enable headless mode in `.env`:
-   ```bash
-   GMAIL_HEADLESS_MODE=true
-   ```
+```bash
+uv run python setup_token.py      # opens a browser, saves token.json
+scp token.json user@server:/path/to/gmailclassifier/
+```
 
-2. Run the application:
-   ```bash
-   uv run python main.py
-   ```
+The token is stored as JSON. A `token.json` written by an older version (a pickled object) is read once and rewritten as JSON on the next start.
 
-3. Copy the URL shown and open it in any browser
-4. After authorizing, copy the full redirect URL and paste it back
+If you must authorize on the server itself, set `GMAIL_HEADLESS_MODE=true` and run `main.py` from an interactive terminal: it prints an authorization URL, you open it in any browser, and paste the full redirect URL back. Without a terminal the agent stops with a message pointing at `setup_token.py`.
 
-**Alternative:** Generate `token.json` locally (with browser), then copy it to your server.
-
-See **[DEPLOYMENT.md](DEPLOYMENT.md)** for detailed headless and Docker deployment instructions.
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for Docker Compose and systemd instructions.
 
 ### Running the Agent
 
@@ -248,7 +242,7 @@ To prevent the state file from growing indefinitely, the agent automatically rem
 - **Cleanup timing**: Old entries are removed when the agent starts and periodically during each poll cycle
 - **Disable retention**: Set `STATE_RETENTION_DAYS=0` to keep all entries forever
 
-**Example**: With `STATE_RETENTION_DAYS=30`, if you receive the same email again after 30 days, it will be reprocessed (useful for recurring notifications).
+**Example**: With `STATE_RETENTION_DAYS=30`, a message that is still unread in your inbox 30 days after it was first classified drops out of the state file and is classified again on the next poll. A newly received message always has a new Gmail id and is unaffected.
 
 **Migration**: Older state files (a plain list of IDs, or ones carrying a `pending_retries` block from the previous guardrail-retry feature) are read and rewritten in the current format on first save.
 
@@ -307,7 +301,7 @@ Emails that receive no label (and the optional review label) are never archived.
 - **`email_classifier_agent.py`**: Main orchestration logic (polling, state, labeling, dry run)
 - **`gmail_client.py`**: Gmail API wrapper for reading/labeling emails
 - **`jev_classifier.py`**: Builds the decisions request, applies the threshold rule, handles retries
-- **`llm_utils.py`**: URL normalization and HTML-to-text reduction
+- **`mail_text.py`**: URL normalization and HTML-to-text reduction
 - **`state_store.py`**: State file persistence
 - **`config.py`**: Configuration and environment variables
 
@@ -380,7 +374,7 @@ docker-compose logs -f
 - Without it, the agent would reprocess all unread emails every time the container restarts
 - Edit `classifier_config.json` or the `JEV_*` values in `.env` and restart the container to apply changes
 
-For detailed deployment instructions (AWS ECS, Kubernetes, systemd), see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+For detailed deployment instructions (Docker Compose, systemd), see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
 ## Troubleshooting
 

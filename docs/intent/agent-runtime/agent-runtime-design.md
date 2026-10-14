@@ -120,7 +120,6 @@ The ledger is consulted inside `process_email`, after gmail-intake has already f
 - Configures root logging to stdout as `time - logger - level - message`.
 - Logs a banner: decisions URL, model, both thresholds, label names, poll interval, and a dry-run notice when on.
 - Constructs the agent and runs the loop. `KeyboardInterrupt` exits 0; any other exception is logged with traceback and exits 1.
-- Sets `ANONYMIZED_TELEMETRY=false` in the environment first. Nothing in the project reads this variable.
 
 ## Decisions & Alternatives
 
@@ -139,7 +138,7 @@ The ledger is consulted inside `process_email`, after gmail-intake has already f
 | Error backoff in the loop | Exponential backoff on consecutive failed cycles: the sleep doubles from the poll interval up to ten times the interval, and resets after a successful cycle | Sleep the normal interval every time (today's code); immediate retry | A failing dependency (Gmail or OpenRouter down) should be hit less often the longer it stays down, not every interval. Ten times the interval caps the wait at ten minutes with the default 60-second poll. |
 | Logging destination | stdout, configurable level, CLI flag over environment | File logging; structured JSON | Logs are written to the console so containers and systemd capture them natively (README "Logging"). |
 | Concurrency | One synchronous loop, one instance | Threads per message; multiple replicas | Multiple instances would race on the same unread mail and the ledger; raise `MAX_EMAILS_PER_POLL` instead (DEPLOYMENT "Scaling Considerations"). |
-| Boolean parsing | Only the literal `true` (any case) is true | Accept `1`, `yes`, `on`; strict `true`/`false` with error | Not a deliberate choice; the first implementation stuck. The cost is that `yes` or `1` is silently false. Whether to widen or to reject unknown values is Deferred 8. |
+| Boolean parsing | Only the literal `true` (any case) is true | Accept `1`, `yes`, `on`; strict `true`/`false` with error | Not a deliberate choice; the first implementation stuck. The cost is that `yes` or `1` is silently false. Whether to widen or to reject unknown values is Deferred 7. |
 
 ## Open Questions & Future Decisions
 
@@ -151,10 +150,9 @@ The ledger is consulted inside `process_email`, after gmail-intake has already f
 2. Handle SIGTERM so `docker stop` ends the loop gracefully instead of killing the process mid-write. Related: a keyboard interrupt that arrives during the failure-path sleep escapes `run_continuous` (the handler is outside its own `except`), so `main` ends the process without the loop's own "stopped" log; exit status is still 0.
 3. Check the ledger before downloading full message bodies. Requires gmail-intake to expose listed ids before fetching details (cascades into gmail-intake).
 4. Detect a missing or empty `OPENROUTER_API_KEY` at startup, before Gmail authentication, instead of on the first email.
-5. Remove the `ANONYMIZED_TELEMETRY` assignment in `main.py`.
-6. Wrap the integer settings with the same ranged error message the float settings get.
-7. Should Gmail authentication happen after the classifier is constructed, so a bad label set or key fails before an OAuth prompt?
-8. Boolean settings accept only the literal `true`. Widen to `1`/`yes`/`on`, or reject any other value loudly?
+5. Wrap the integer settings with the same ranged error message the float settings get.
+6. Should Gmail authentication happen after the classifier is constructed, so a bad label set or key fails before an OAuth prompt?
+7. Boolean settings accept only the literal `true`. Widen to `1`/`yes`/`on`, or reject any other value loudly?
 
 ## References
 

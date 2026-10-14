@@ -8,7 +8,6 @@ non-generative decision model, via OpenRouter.
 
 import argparse
 import logging
-import os
 import sys
 
 import config
@@ -31,7 +30,6 @@ def setup_logging(level: str = "INFO"):
 # @spec AGENT-CLI-001, AGENT-CLI-002, AGENT-CLI-003
 def main():
     """Main entry point for the email classifier agent."""
-    os.environ["ANONYMIZED_TELEMETRY"] = "false"
     parser = argparse.ArgumentParser(
         description="Gmail Email Classifier Agent (Jev via OpenRouter)"
     )

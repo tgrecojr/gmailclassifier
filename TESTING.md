@@ -35,7 +35,7 @@ pytest tests/ --cov=. --cov-report=term-missing --cov-report=html
 ### Run specific test file
 
 ```bash
-pytest tests/test_llm_utils.py -v
+pytest tests/test_mail_text.py -v
 ```
 
 ### Run specific test class
@@ -59,8 +59,8 @@ tests/
 ├── test_config.py                   # classifier_config.json validation, JEV_* resolution
 ├── test_email_classifier_agent.py   # Agent wiring, labeling, review label, dry run, state and retention
 ├── test_gmail_client.py             # Gmail API client (mocked googleapiclient), HTML fallback stripping
-├── test_jev_classifier.py           # Request shape, threshold rule, HTTP retries (httpx2.MockTransport)
-└── test_llm_utils.py                # URL normalization, HTML reduction, result logging
+├── test_jev_classifier.py           # Request shape, threshold rule, HTTP retries, result logging
+└── test_mail_text.py                # URL normalization, HTML reduction
 ```
 
 ## Test Coverage
@@ -70,10 +70,10 @@ CI enforces a **90%** minimum; the suite currently sits around 95%.
 What is covered:
 
 - **config.py**: classifier config validation (labels, `label_descriptions`, reserved `None`), `JEV_*` defaults, overrides and range checks, `DRY_RUN`
-- **jev_classifier.py**: request body (one Noul per label, Choice with `None`), state building (URL normalization, HTML stripping, body cap), `select_labels` matrix, retry on timeout/429/5xx, 4xx and malformed bodies yielding `[]`
+- **jev_classifier.py**: result logging, request body (one Noul per label, Choice with `None`), state building (URL normalization, HTML stripping, body cap), `select_labels` matrix, retry on timeout/429/5xx, 4xx and malformed bodies yielding `[]`
 - **email_classifier_agent.py**: classifier receives config values, labels applied and archived, review label for unlabeled mail, dry run writes nothing, state persistence and retention pruning, legacy state migration, polling loop
-- **gmail_client.py**: OAuth flow, message fetching, HTML-only body reduction, labelling, inbox removal
-- **llm_utils.py**: URL normalization, HTML detection and reduction, result logging
+- **gmail_client.py**: OAuth flow (JSON token, legacy pickle, no-TTY failure), message fetching, HTML-only body reduction, labelling, inbox removal
+- **mail_text.py**: URL normalization, HTML detection and reduction
 
 `main.py`, `setup_token.py` and `verify_setup.py` are entry points excluded from coverage (see `[tool.coverage.run]` in `pyproject.toml`).
 

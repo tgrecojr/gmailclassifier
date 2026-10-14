@@ -24,12 +24,7 @@ from urllib.parse import urlparse
 
 import httpx2 as httpx
 
-from llm_utils import (
-    log_classification_result,
-    looks_like_html,
-    normalize_urls,
-    strip_html,
-)
+from mail_text import looks_like_html, normalize_urls, strip_html
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +139,25 @@ def validate_labels(labels: list[str], descriptions: dict[str, str]) -> None:
     keys = [question_key(label) for label in labels]
     if len(set(keys)) != len(keys):
         raise ValueError(f"Label names collide after normalisation: {labels}")
+
+
+# @spec DECISION-LOG-001
+def log_classification_result(email: dict, labels: list[str], provider: str):
+    """
+    Log the classification result in a consistent format.
+
+    Args:
+        email: Email dictionary
+        labels: Predicted labels
+        provider: Provider name for logging
+    """
+    subject = email.get("subject", "No Subject")
+    if labels:
+        logger.info(
+            f"[{provider}] Classified '{subject[:50]}...' with labels: {labels}"
+        )
+    else:
+        logger.warning(f"[{provider}] No labels predicted for '{subject[:50]}...'")
 
 
 class JevClassifier:

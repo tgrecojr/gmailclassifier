@@ -1,18 +1,19 @@
 # Gmail Intake — EARS Specs
 
-Prefix `INTAKE`. Facets: `AUTH` (credential resolution and the token script), `FETCH` (listing and per-message records), `BODY` (MIME body extraction), `TEXT` (shared text reduction in `llm_utils.py`).
+Prefix `INTAKE`. Facets: `AUTH` (credential resolution and the token script), `FETCH` (listing and per-message records), `BODY` (MIME body extraction), `TEXT` (shared text reduction in `mail_text.py`).
 
 Status markers: `[x]` observed working in current code, `[ ]` specified but broken or partial, `[D]` explicit non-want.
 
 ## Authentication
 
-- [x] **INTAKE-AUTH-001**: When a file exists at the configured Gmail token path, the Gmail client shall load credentials from it and, if they are valid, use them without prompting.
+- [x] **INTAKE-AUTH-001**: When a file exists at the configured Gmail token path, the Gmail client shall load credentials from it, reading the JSON form this agent writes and, failing that, the pickle form written by earlier versions, and if they are valid shall use them without prompting.
 - [x] **INTAKE-AUTH-002**: When loaded Gmail credentials are expired and carry a refresh token, the Gmail client shall refresh them before building the Gmail service.
 - [x] **INTAKE-AUTH-003**: When no valid Gmail credentials can be loaded or refreshed and headless mode is off, the Gmail client shall run the installed-app OAuth flow from the configured credentials file with a local redirect server on port 8080.
 - [x] **INTAKE-AUTH-004**: When no valid Gmail credentials can be loaded or refreshed and headless mode is on, the Gmail client shall print the authorization URL, read the full redirect URL from standard input, and exchange it for credentials.
-- [x] **INTAKE-AUTH-005**: When Gmail credentials are obtained or refreshed, the Gmail client shall persist them to the configured token path (pickle format) before building the Gmail service.
+- [ ] **INTAKE-AUTH-005**: When Gmail credentials are obtained, refreshed, or were read from a legacy pickle file, the Gmail client shall persist them to the configured token path as JSON before building the Gmail service.
 - [x] **INTAKE-AUTH-006**: When the token setup script is run and a token file already exists, the script shall ask for confirmation and, on yes, rename the existing token to `<token path>.backup` before starting a browser-mode OAuth flow.
 - [x] **INTAKE-AUTH-007**: If the token setup script is run and the credentials file is missing, then the script shall print download instructions and exit non-zero without starting an OAuth flow.
+- [ ] **INTAKE-AUTH-008**: If headless mode requires an OAuth flow and standard input is not an interactive terminal, then the Gmail client shall raise an error naming `setup_token.py` instead of waiting for pasted input.
 
 ## Fetching
 

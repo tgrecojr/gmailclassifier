@@ -20,6 +20,7 @@ from jev_classifier import (
     JevClassifier,
     JevRequestError,
     build_questions,
+    log_classification_result,
     build_state,
     question_key,
     select_labels,
@@ -361,3 +362,72 @@ class TestJevClassifierHttp:
                 labels=["None"],
                 label_descriptions={"None": "x"},
             )
+
+
+@pytest.mark.unit
+class TestLogClassificationResult:
+    """Test classification result logging."""
+
+    # @spec DECISION-LOG-001
+    def test_log_with_labels(self, caplog):
+        """Test logging when labels are predicted."""
+        import logging
+
+        caplog.set_level(logging.INFO)
+
+        email = {"subject": "Test Email Subject"}
+        labels = ["AWS", "Finance"]
+        provider = "TestProvider"
+
+        log_classification_result(email, labels, provider)
+
+        assert "TestProvider" in caplog.text
+        assert "Test Email Subject" in caplog.text
+        assert "AWS" in caplog.text
+        assert "Finance" in caplog.text
+
+    # @spec DECISION-LOG-001
+    def test_log_without_labels(self, caplog):
+        """Test logging when no labels are predicted."""
+        import logging
+
+        caplog.set_level(logging.WARNING)
+
+        email = {"subject": "Test Email"}
+        labels = []
+        provider = "TestProvider"
+
+        log_classification_result(email, labels, provider)
+
+        assert "No labels predicted" in caplog.text
+
+    # @spec DECISION-LOG-001
+    def test_log_with_long_subject(self, caplog):
+        """Test logging with long email subject (should be truncated)."""
+        import logging
+
+        caplog.set_level(logging.INFO)
+
+        email = {"subject": "A" * 100}
+        labels = ["AWS"]
+        provider = "TestProvider"
+
+        log_classification_result(email, labels, provider)
+
+        # Should truncate at 50 chars
+        assert caplog.text.count("A") <= 53  # 50 + '...'
+
+    # @spec DECISION-LOG-001
+    def test_log_with_no_subject(self, caplog):
+        """Test logging when email has no subject."""
+        import logging
+
+        caplog.set_level(logging.INFO)
+
+        email = {}
+        labels = ["AWS"]
+        provider = "TestProvider"
+
+        log_classification_result(email, labels, provider)
+
+        assert "No Subject" in caplog.text

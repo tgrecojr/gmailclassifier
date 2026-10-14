@@ -15,7 +15,7 @@ That property shapes the whole segment:
 - **The rule is pure and the transport is thin.** State building, question building, label validation, and label selection are plain functions over dicts. `JevClassifier` adds only an HTTP client, one retry, and response parsing.
 - **Failures never escape to the poll loop.** `classify_email` returns an empty list on any failure after logging it. The agent-runtime segment decides what an empty list means.
 
-The segment is all of `jev_classifier.py` plus `log_classification_result` in `llm_utils.py`, which only this segment calls.
+The segment is all of `jev_classifier.py`, including `log_classification_result`.
 
 ## Request Shape
 
@@ -141,12 +141,11 @@ It runs in the `JevClassifier` constructor and is also called by `config.py` whe
 3. Should 429 responses honor `Retry-After`, and should the retry delay back off?
 4. `_probability` accepts booleans as 1.0 and 0.0. Reject or coerce explicitly?
 5. The thresholds were never measured: the planned precision/recall sweep over hand-labeled mail was skipped and its scripts removed. Decide whether to run that measurement (the approach is recorded in the migration plan in git history) or to keep tuning from DEBUG logs.
-6. `log_classification_result` lives in `llm_utils.py` (gmail-intake's file) but is this segment's behavior. Move it, or accept the cross-segment annotation.
 
 ## References
 
-- `jev_classifier.py`, `llm_utils.py:72-87`
-- `tests/test_jev_classifier.py`, `tests/test_llm_utils.py::TestLogClassificationResult`
+- `jev_classifier.py`, `mail_text.py:72-87`
+- `tests/test_jev_classifier.py`
 - README.md: "Jev Configuration", "How labels are chosen", "Error Handling", "What is sent to the model, and why no injection guard is needed"
 - TESTING.md: "Mocking External APIs"
 - Upstream consumer: `docs/intent/agent-runtime/agent-runtime-design.md` (`process_email`)

@@ -1,6 +1,7 @@
+import base64
 import os
 import pickle
-import base64
+import sys
 from typing import List, Dict, Optional
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -8,7 +9,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import logging
-from llm_utils import normalize_urls, strip_html
+from mail_text import normalize_urls, strip_html
 
 logger = logging.getLogger(__name__)
 
@@ -35,17 +36,34 @@ class GmailClient:
         self.service = None
         self._authenticate()
 
+    def _load_token(self):
+        """
+        Read the token file. The agent writes JSON; earlier versions wrote a
+        pickled Credentials object at the same path. Returns (creds, legacy).
+        """
+        try:
+            return (
+                Credentials.from_authorized_user_file(self.token_path, self.scopes),
+                False,
+            )
+        except ValueError, UnicodeDecodeError:
+            logger.info("Token file is not JSON; reading legacy pickle format")
+            with open(self.token_path, "rb") as token:
+                return pickle.load(token), True
+
+    def _save_token(self, creds) -> None:
+        with open(self.token_path, "w", encoding="utf-8") as token:
+            token.write(creds.to_json())
+
     # @spec INTAKE-AUTH-001, INTAKE-AUTH-002, INTAKE-AUTH-003, INTAKE-AUTH-004, INTAKE-AUTH-005
     def _authenticate(self):
         """Authenticate and build Gmail service."""
         creds = None
+        needs_save = False
 
-        # Load existing token if available
         if os.path.exists(self.token_path):
-            with open(self.token_path, "rb") as token:
-                creds = pickle.load(token)
+            creds, needs_save = self._load_token()
 
-        # If no valid credentials, get new ones
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 logger.info("Refreshing expired credentials")
@@ -55,27 +73,31 @@ class GmailClient:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     self.credentials_path, self.scopes
                 )
-
                 if self.headless:
-                    # Headless mode: print URL and ask for authorization code
                     creds = self._run_console_flow(flow)
                 else:
-                    # Browser mode: open browser automatically
                     creds = flow.run_local_server(port=8080)
+            needs_save = True
 
-            # Save credentials for next run
-            with open(self.token_path, "wb") as token:
-                pickle.dump(creds, token)
+        if needs_save:
+            self._save_token(creds)
 
         self.service = build("gmail", "v1", credentials=creds)
         logger.info("Gmail API authentication successful")
 
-    # @spec INTAKE-AUTH-004
+    # @spec INTAKE-AUTH-004, INTAKE-AUTH-008
     def _run_console_flow(self, flow):
         """
         Run OAuth flow in console/headless mode.
         User must manually visit URL and paste authorization code.
         """
+        if not sys.stdin.isatty():
+            raise RuntimeError(
+                "Headless OAuth needs an interactive terminal to paste the redirect "
+                "URL into. Generate the token on a machine with a browser using "
+                "setup_token.py and copy it to the configured token path."
+            )
+
         # Generate authorization URL
         auth_url, _ = flow.authorization_url(prompt="consent")
 

@@ -93,7 +93,7 @@ One poll cycle, as agent-runtime sequences it:
 4. Labels found: gmail-actions adds them and removes the message from the inbox in one call (archiving is configurable). None found: the message stays in the inbox, optionally under a review label.
 5. The id is written to the ledger. The loop sleeps one interval.
 
-Segment ownership of the two shared files: `gmail_client.py` is split between gmail-intake (read side and authentication) and gmail-actions (write side); `email_classifier_agent.py` is split between agent-runtime (construction, policy, loop) and processed-state (ledger methods). `llm_utils.py` belongs to gmail-intake except `log_classification_result`, which jev-decision specifies.
+Segment ownership of the two shared files: `gmail_client.py` is split between gmail-intake (read side and authentication) and gmail-actions (write side); `email_classifier_agent.py` is split between agent-runtime (construction, policy, loop) and processed-state (ledger methods). `mail_text.py` (URL and HTML reduction) belongs to gmail-intake.
 
 Segment design docs live under `docs/intent/<segment>/`; status and findings per segment live under `docs/arrows/` with `index.yaml` as the manifest.
 

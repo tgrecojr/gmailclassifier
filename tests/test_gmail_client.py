@@ -3,7 +3,6 @@ Unit tests for gmail_client.py
 """
 
 import base64
-import pickle
 from unittest.mock import MagicMock, Mock, mock_open, patch
 
 import pytest
@@ -34,53 +33,82 @@ def client():
 
 @pytest.mark.unit
 class TestAuthenticate:
-    """Test OAuth/token handling in _authenticate."""
+    """Token handling in _authenticate: JSON token, legacy pickle, refresh, OAuth flows."""
 
     # @spec INTAKE-AUTH-001
-    def test_uses_existing_valid_token(self):
+    def test_uses_existing_valid_json_token(self):
         creds = MagicMock()
         creds.valid = True
         creds.expired = False
 
         with (
             patch("gmail_client.os.path.exists", return_value=True),
-            patch("gmail_client.open", mock_open(read_data=b"irrelevant")),
-            patch("gmail_client.pickle.load", return_value=creds),
+            patch(
+                "gmail_client.Credentials.from_authorized_user_file", return_value=creds
+            ) as mock_load,
+            patch("gmail_client.open", mock_open()) as mock_file,
             patch("gmail_client.build") as mock_build,
         ):
             mock_build.return_value = "gmail-service"
             c = GmailClient("creds.json", "token.json", ["scope"])
 
+        mock_load.assert_called_once_with("token.json", ["scope"])
         assert c.service == "gmail-service"
         mock_build.assert_called_once_with("gmail", "v1", credentials=creds)
+        mock_file.assert_not_called()  # a valid JSON token is not rewritten
+
+    # @spec INTAKE-AUTH-001, INTAKE-AUTH-005
+    def test_legacy_pickle_token_is_read_and_rewritten_as_json(self):
+        creds = MagicMock()
+        creds.valid = True
+        creds.expired = False
+        creds.to_json.return_value = '{"token": "t"}'
+
+        with (
+            patch("gmail_client.os.path.exists", return_value=True),
+            patch(
+                "gmail_client.Credentials.from_authorized_user_file",
+                side_effect=ValueError("not json"),
+            ),
+            patch("gmail_client.open", mock_open(read_data=b"\x80pickle")) as mock_file,
+            patch("gmail_client.pickle.load", return_value=creds),
+            patch("gmail_client.build"),
+        ):
+            GmailClient("creds.json", "token.json", ["scope"])
+
+        mock_file().write.assert_called_once_with('{"token": "t"}')
 
     # @spec INTAKE-AUTH-002, INTAKE-AUTH-005
-    def test_refreshes_expired_token(self):
+    def test_refreshes_expired_token_and_saves_json(self):
         creds = MagicMock()
         creds.valid = False
         creds.expired = True
         creds.refresh_token = "refresh"
+        creds.to_json.return_value = '{"token": "fresh"}'
 
         with (
             patch("gmail_client.os.path.exists", return_value=True),
-            patch("gmail_client.open", mock_open(read_data=b"irrelevant")),
-            patch("gmail_client.pickle.load", return_value=creds),
-            patch("gmail_client.pickle.dump"),
+            patch(
+                "gmail_client.Credentials.from_authorized_user_file", return_value=creds
+            ),
+            patch("gmail_client.open", mock_open()) as mock_file,
             patch("gmail_client.build"),
         ):
             GmailClient("creds.json", "token.json", ["scope"])
 
         creds.refresh.assert_called_once()
+        mock_file.assert_called_once_with("token.json", "w", encoding="utf-8")
+        mock_file().write.assert_called_once_with('{"token": "fresh"}')
 
     # @spec INTAKE-AUTH-003, INTAKE-AUTH-005
     def test_runs_oauth_flow_when_no_token(self):
         new_creds = MagicMock()
+        new_creds.to_json.return_value = '{"token": "new"}'
 
         with (
             patch("gmail_client.os.path.exists", return_value=False),
             patch("gmail_client.InstalledAppFlow") as mock_flow_cls,
-            patch("gmail_client.open", mock_open()),
-            patch("gmail_client.pickle.dump") as mock_dump,
+            patch("gmail_client.open", mock_open()) as mock_file,
             patch("gmail_client.build"),
         ):
             mock_flow = MagicMock()
@@ -90,8 +118,7 @@ class TestAuthenticate:
             GmailClient("creds.json", "token.json", ["scope"], headless=False)
 
         mock_flow.run_local_server.assert_called_once_with(port=8080)
-        # Credentials get persisted
-        assert mock_dump.called
+        mock_file().write.assert_called_once_with('{"token": "new"}')
 
     # @spec INTAKE-AUTH-004
     def test_headless_mode_uses_console_flow(self):
@@ -101,7 +128,6 @@ class TestAuthenticate:
             patch("gmail_client.os.path.exists", return_value=False),
             patch("gmail_client.InstalledAppFlow") as mock_flow_cls,
             patch("gmail_client.open", mock_open()),
-            patch("gmail_client.pickle.dump"),
             patch("gmail_client.build"),
             patch.object(
                 GmailClient, "_run_console_flow", return_value=new_creds
@@ -111,6 +137,18 @@ class TestAuthenticate:
             GmailClient("creds.json", "token.json", ["scope"], headless=True)
 
         mock_console.assert_called_once()
+
+    # @spec INTAKE-AUTH-008
+    def test_console_flow_without_a_terminal_fails_and_points_at_setup_token(
+        self, client
+    ):
+        flow = MagicMock()
+        with patch("gmail_client.sys.stdin") as stdin:
+            stdin.isatty.return_value = False
+            with pytest.raises(RuntimeError, match="setup_token.py"):
+                client._run_console_flow(flow)
+
+        flow.authorization_url.assert_not_called()
 
 
 @pytest.mark.unit
