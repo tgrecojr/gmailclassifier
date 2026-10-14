@@ -22,7 +22,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: gmail-intake.md
-    next: "Add @spec annotations to gmail_client.py, llm_utils.py, setup_token.py and their tests; decide on nested multipart body extraction and the 5000-character cap."
+    next: "Run /arrow-maintenance to audit; decide on nested multipart body extraction and the 5000-character cap."
     drift: null
 
   jev-decision:
@@ -34,7 +34,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: jev-decision.md
-    next: "Add @spec annotations to jev_classifier.py, llm_utils.py:72-87 and tests."
+    next: "Run /arrow-maintenance to audit; decide who owns the 5000-character cap."
     drift: null
 
   gmail-actions:
@@ -46,7 +46,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: gmail-actions.md
-    next: "Verify Gmail's case handling for label names; run /arrow-maintenance to audit (annotations are in place)."
+    next: "Run /arrow-maintenance to audit; verify Gmail's case handling for label names."
     drift: null
 
   processed-state:
@@ -58,7 +58,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: processed-state.md
-    next: "Add @spec annotations to state_store.py, email_classifier_agent.py:82-117 and TestStateTracking; decide on atomic state-file writes."
+    next: "Run /arrow-maintenance to audit; decide on atomic state-file writes."
     drift: null
 
   agent-runtime:
@@ -70,7 +70,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: agent-runtime.md
-    next: "Add @spec annotations to the CFG, INIT, PROC and CLI entry points and tests; add SIGTERM handling."
+    next: "Run /arrow-maintenance to audit; add SIGTERM handling."
     drift: null
 
   operations:
@@ -82,7 +82,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: operations.md
-    next: "Add @spec comments to verify_setup.py; decide on a container health signal (cascades into agent-runtime)."
+    next: "Run /arrow-maintenance to audit; decide on a container health signal (cascades into agent-runtime)."
     drift: null
 
 unmapped:
