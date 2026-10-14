@@ -1,0 +1,90 @@
+schema_version: 2
+last_updated: 2026-10-14
+
+# Taxonomy groups segments by stage on an email's path through the agent.
+# Purely organizational; the design tree below is flat (depth-2).
+taxonomy:
+  mail-path:
+    - gmail-intake
+    - jev-decision
+    - gmail-actions
+    - processed-state
+    - agent-runtime
+  delivery: operations
+
+arrows:
+  gmail-intake:
+    status: MAPPED
+    parent: null
+    sampled: 2026-10-14
+    audited: null
+    audited_sha: null
+    blocks: []
+    blockedBy: []
+    detail: gmail-intake.md
+    next: "Add @spec annotations to gmail_client.py, llm_utils.py, setup_token.py and their tests; decide on nested multipart body extraction and the 5000-character cap."
+    drift: null
+
+  jev-decision:
+    status: MAPPED
+    parent: null
+    sampled: 2026-10-14
+    audited: null
+    audited_sha: null
+    blocks: []
+    blockedBy: []
+    detail: jev-decision.md
+    next: "Add @spec annotations to jev_classifier.py, llm_utils.py:72-87 and tests; correct the README's 'never sees label names' claim (doc-only)."
+    drift: null
+
+  gmail-actions:
+    status: MAPPED
+    parent: null
+    sampled: 2026-10-14
+    audited: null
+    audited_sha: null
+    blocks: []
+    blockedBy: []
+    detail: gmail-actions.md
+    next: "Verify Gmail's case handling for label names; run /arrow-maintenance to audit (annotations are in place)."
+    drift: null
+
+  processed-state:
+    status: MAPPED
+    parent: null
+    sampled: 2026-10-14
+    audited: null
+    audited_sha: null
+    blocks: []
+    blockedBy: []
+    detail: processed-state.md
+    next: "Add @spec annotations to state_store.py, email_classifier_agent.py:82-117 and TestStateTracking; decide on atomic state-file writes."
+    drift: null
+
+  agent-runtime:
+    status: MAPPED
+    parent: null
+    sampled: 2026-10-14
+    audited: null
+    audited_sha: null
+    blocks: []
+    blockedBy: []
+    detail: agent-runtime.md
+    next: "Add @spec annotations to email_classifier_agent.py, config.py, main.py and tests; implement exponential backoff on failed poll cycles (AGENT-LOOP-003); add SIGTERM handling."
+    drift: null
+
+  operations:
+    status: MAPPED
+    parent: null
+    sampled: 2026-10-14
+    audited: null
+    audited_sha: null
+    blocks: []
+    blockedBy: []
+    detail: operations.md
+    next: "Add @spec comments to the Dockerfile, workflows, and verify_setup.py; raise coverage floor to 90% (OPS-CI-002), drop arm64 (OPS-CI-006), build on PRs (OPS-CI-009); decide on a container health signal (cascades into agent-runtime)."
+    drift: null
+
+unmapped:
+  docs:
+    intent: []
