@@ -370,6 +370,21 @@ class TestRunContinuous:
         assert set(agent.processed_emails) == {"a", "b"}
         mock_gmail_client.get_unread_messages.assert_called_once_with(max_results=10)
 
+    # @spec AGENT-LOOP-002
+    def test_empty_inbox_sleeps_without_classifying(
+        self, mock_config, mock_gmail_client, mock_classifier
+    ):
+        mock_config.POLL_INTERVAL_SECONDS = 0
+        mock_config.MAX_EMAILS_PER_POLL = 10
+        mock_gmail_client.get_unread_messages.return_value = []
+        agent = EmailClassifierAgent()
+
+        with patch("email_classifier_agent.time.sleep", side_effect=KeyboardInterrupt):
+            agent.run_continuous()
+
+        mock_classifier.classify_email.assert_not_called()
+        assert agent.processed_emails == {}
+
     # @spec AGENT-LOOP-003
     def test_loop_survives_gmail_errors(
         self, mock_config, mock_gmail_client, mock_classifier
