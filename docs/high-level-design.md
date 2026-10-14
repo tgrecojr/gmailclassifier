@@ -111,6 +111,8 @@ Segment design docs live under `docs/intent/<segment>/`; status and findings per
 
 **Mark processed on every outcome.** Labeled, sent to review, no label, or a swallowed failure all end with the id in the ledger; only an unexpected exception leaves an email for the next poll. This is the simplest rule that guarantees no double classification. Its cost, that a transient outage skips mail for the retention window, is accepted under the tenet *classify once over classify eventually*. Detail: `docs/intent/agent-runtime/`.
 
+**Some specs are verified by running, not by unit tests.** The operator scripts (`setup_token.py`, `verify_setup.py`), the CLI entry point (`main.py`), import-time configuration behavior, and everything in the operations segment (image, workflows, dependency policy) are exercised by running them: a pull request builds the image and runs the lint and test jobs, a push to `main` runs the publish pipeline, and the scripts are run by the operator. These specs carry `@spec` annotations in code but no test citation, and that counts as covered for a segment to reach OK. The alternative, unit-testing argument parsing and workflow YAML through mocks, would add maintenance without catching the failures that matter, which only show up when the thing actually runs. All of this code is excluded from the coverage measurement for the same reason.
+
 **Distroless image, merge means ship.** Chainguard Python images pinned by digest, dependencies from the frozen lockfile, `nonroot` runtime, no secrets in the image. A push to `main` runs dependency scans, builds for amd64, signs with cosign, and attests SBOM and provenance. Detail: `docs/intent/operations/`.
 
 ## Success Metrics

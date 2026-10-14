@@ -4,7 +4,7 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 
 ## Status
 
-**MAPPED** — sampled 2026-10-14 (git SHA `08bbc6be6f312e7b4699611f03ec69a733093374`). Segment identified and documented from code; specs not yet verified against code by an audit pass.
+**OK** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 29 specs implemented, annotated in code, and cited by tests.
 
 ## References
 
@@ -23,7 +23,7 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 
 ### Code
 - jev_classifier.py (all)
-- llm_utils.py:72-87 (`log_classification_result`, called only from this segment)
+- llm_utils.py:76-91 (`log_classification_result`, called only from this segment)
 
 ## Architecture
 
@@ -50,11 +50,11 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 
 ## Key Findings
 
-1. **Every failure collapses to "no labels"** — `classify_email` (`jev_classifier.py:235-246`) catches `JevRequestError` and returns `[]`. The caller cannot tell a transport outage from a confident "nothing fits", and the agent-runtime segment marks the email processed either way. Accepted under the HLD tenet *classify once over classify eventually*.
-2. **Retry policy is fixed and minimal** — `MAX_ATTEMPTS = 2`, one sleep of `retry_delay_seconds` (default 1.0), `RETRYABLE_STATUSES = {429, 500, 502, 503, 504}` (`:42-43`, `:183-205`). `Retry-After` headers are ignored; there is no backoff or jitter.
-3. **Missing API key is not detected here** — the constructor builds `Authorization: Bearer {api_key}` (`:173`) without checking for `None` or empty. A missing key surfaces as HTTP 401 on the first email.
-4. **Body cap and text reduction are duplicated with gmail-intake** — `BODY_MAX_CHARS = 5000` (`:41`) and the reduction in `build_state` (`:57-71`) repeat what the Gmail client already did. Both are idempotent. The duplication makes the classifier correct for any caller (the setup-verification probe bypasses the Gmail client), at the cost of two owners for one number.
-5. **Booleans count as probabilities** — `_probability` (`:96-97`) accepts anything `isinstance(..., (int, float))`, which includes `bool`. A `noul: true` would read as 1.0. Not observed from the live endpoint; noted as an edge.
+1. **Every failure collapses to "no labels"** — `classify_email` (`jev_classifier.py:244-255`) catches `JevRequestError` and returns `[]`. The caller cannot tell a transport outage from a confident "nothing fits", and the agent-runtime segment marks the email processed either way. Accepted under the HLD tenet *classify once over classify eventually*.
+2. **Retry policy is fixed and minimal** — `MAX_ATTEMPTS = 2`, one sleep of `retry_delay_seconds` (default 1.0), `RETRYABLE_STATUSES = {429, 500, 502, 503, 504}` (`:42-43`, `:190-212`). `Retry-After` headers are ignored; there is no backoff or jitter.
+3. **Missing API key is not detected here** — the constructor builds `Authorization: Bearer {api_key}` (`:179`) without checking for `None` or empty. A missing key surfaces as HTTP 401 on the first email.
+4. **Body cap and text reduction are duplicated with gmail-intake** — `BODY_MAX_CHARS = 5000` (`:41`) and the reduction in `build_state` (`:59-73`) repeat what the Gmail client already did. Both are idempotent. The duplication makes the classifier correct for any caller (the setup-verification probe bypasses the Gmail client), at the cost of two owners for one number.
+5. **Booleans count as probabilities** — `_probability` (`:99-100`) accepts anything `isinstance(..., (int, float))`, which includes `bool`. A `noul: true` would read as 1.0. Not observed from the live endpoint; noted as an edge.
 6. **Pure rule is cleanly separable from transport** — `build_state`, `build_questions`, `select_labels`, and `validate_labels` take and return plain dicts and lists. Tests exercise the HTTP layer through `httpx2.MockTransport` and assert the exact request body.
 
 ## Work Required

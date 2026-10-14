@@ -126,6 +126,7 @@ class TestJevSettings:
         assert config.LABELS == ["AWS", "Finance", "Work", "Personal"]
         assert set(config.LABEL_DESCRIPTIONS) == set(config.LABELS)
 
+    # @spec AGENT-CFG-015
     def test_api_key_is_read(self, reload_config):
         config = reload_config(OPENROUTER_API_KEY="sk-or-v1-test")
         assert config.OPENROUTER_API_KEY == "sk-or-v1-test"

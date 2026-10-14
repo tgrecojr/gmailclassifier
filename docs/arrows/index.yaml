@@ -14,75 +14,75 @@ taxonomy:
 
 arrows:
   gmail-intake:
-    status: MAPPED
+    status: OK
     parent: null
     sampled: 2026-10-14
-    audited: null
-    audited_sha: null
+    audited: 2026-10-14
+    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
     blocks: []
     blockedBy: []
     detail: gmail-intake.md
-    next: "Run /arrow-maintenance to audit; decide on nested multipart body extraction and the 5000-character cap."
+    next: null
     drift: null
 
   jev-decision:
-    status: MAPPED
+    status: OK
     parent: null
     sampled: 2026-10-14
-    audited: null
-    audited_sha: null
+    audited: 2026-10-14
+    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
     blocks: []
     blockedBy: []
     detail: jev-decision.md
-    next: "Run /arrow-maintenance to audit; decide who owns the 5000-character cap."
+    next: null
     drift: null
 
   gmail-actions:
-    status: MAPPED
+    status: OK
     parent: null
     sampled: 2026-10-14
-    audited: null
-    audited_sha: null
+    audited: 2026-10-14
+    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
     blocks: []
     blockedBy: []
     detail: gmail-actions.md
-    next: "Run /arrow-maintenance to audit; verify Gmail's case handling for label names."
+    next: null
     drift: null
 
   processed-state:
-    status: MAPPED
+    status: OK
     parent: null
     sampled: 2026-10-14
-    audited: null
-    audited_sha: null
+    audited: 2026-10-14
+    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
     blocks: []
     blockedBy: []
     detail: processed-state.md
-    next: "Run /arrow-maintenance to audit; decide on atomic state-file writes."
+    next: null
     drift: null
 
   agent-runtime:
-    status: MAPPED
+    status: OK
     parent: null
     sampled: 2026-10-14
-    audited: null
-    audited_sha: null
+    audited: 2026-10-14
+    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
     blocks: []
     blockedBy: []
     detail: agent-runtime.md
-    next: "Run /arrow-maintenance to audit; add SIGTERM handling."
+    next: null
     drift: null
 
   operations:
-    status: MAPPED
+    status: OK
     parent: null
     sampled: 2026-10-14
-    audited: null
-    audited_sha: null
+    audited: 2026-10-14
+    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
     blocks: []
     blockedBy: []
     detail: operations.md
-    next: "Run /arrow-maintenance to audit; decide on a container health signal (cascades into agent-runtime)."
+    next: null
     drift: null
 
 unmapped:

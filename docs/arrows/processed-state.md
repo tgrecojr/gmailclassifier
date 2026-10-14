@@ -4,7 +4,7 @@ Persist the ledger of processed email IDs, migrate older file formats, and prune
 
 ## Status
 
-**MAPPED** — sampled 2026-10-14 (git SHA `08bbc6be6f312e7b4699611f03ec69a733093374`). Segment identified and documented from code; specs not yet verified against code by an audit pass.
+**OK** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 15 specs implemented, annotated in code, and cited by tests.
 
 ## References
 
@@ -22,7 +22,7 @@ Persist the ledger of processed email IDs, migrate older file formats, and prune
 
 ### Code
 - state_store.py (all)
-- email_classifier_agent.py:82-117 (`_load_state`, `_cleanup_old_state`, `_save_state`, `_mark_processed`)
+- email_classifier_agent.py:89-129 (`_load_state`, `_cleanup_old_state`, `_save_state`, `_mark_processed`)
 
 ## Architecture
 
@@ -46,12 +46,12 @@ Persist the ledger of processed email IDs, migrate older file formats, and prune
 
 ## Key Findings
 
-1. **The ledger records only that an email was handled, not how** — `_mark_processed` (`email_classifier_agent.py:115-117`) stores an ID and a timestamp. A labeled email, one sent to the review label, and one whose classification or label write failed are indistinguishable in the file. This is why the failure-handling questions in jev-decision and gmail-actions cannot be answered by the ledger alone.
-2. **Writes are not atomic** — `save_state` (`state_store.py:58-59`) opens the file for writing and dumps into it. A crash mid-write leaves a truncated file; the next load treats it as unreadable and starts empty, so every unread message still in the inbox is reclassified and relabeled. Benign for labels, which are idempotent, but it costs one Jev call per message.
+1. **The ledger records only that an email was handled, not how** — `_mark_processed` (`email_classifier_agent.py:125-127`) stores an ID and a timestamp. A labeled email, one sent to the review label, and one whose classification or label write failed are indistinguishable in the file. This is why the failure-handling questions in jev-decision and gmail-actions cannot be answered by the ledger alone.
+2. **Writes are not atomic** — `save_state` (`state_store.py:60-61`) opens the file for writing and dumps into it. A crash mid-write leaves a truncated file; the next load treats it as unreadable and starts empty, so every unread message still in the inbox is reclassified and relabeled. Benign for labels, which are idempotent, but it costs one Jev call per message.
 3. **One write per processed email** — `_mark_processed` saves on every call. With `MAX_EMAILS_PER_POLL` of 10 that is at most 10 writes per poll. Harmless at this scale; it bounds loss to one email on a crash.
-4. **A bad state file never stops the agent** — `load_state` (`state_store.py:36-41`) returns `{}` on any exception and logs at ERROR. Stated as design in the docstring.
-5. **Timestamp comparison drops anything it cannot compare** — `cleanup_old_entries` (`state_store.py:79-82`) catches `ValueError` and `TypeError`, so a naive timestamp would be pruned as invalid. No version of this project ever wrote naive timestamps (UTC-aware since the store was introduced; the legacy list had none), so this path is defensive.
-6. **Retention is applied twice per lifecycle** — once in `_load_state` at startup and once at the top of every poll in `run_continuous` (`email_classifier_agent.py:222`). A retention of zero or less disables both (`:101-102`).
+4. **A bad state file never stops the agent** — `load_state` (`state_store.py:37-42`) returns `{}` on any exception and logs at ERROR. Stated as design in the docstring.
+5. **Timestamp comparison drops anything it cannot compare** — `cleanup_old_entries` (`state_store.py:82-86`) catches `ValueError` and `TypeError`, so a naive timestamp would be pruned as invalid. No version of this project ever wrote naive timestamps (UTC-aware since the store was introduced; the legacy list had none), so this path is defensive.
+6. **Retention is applied twice per lifecycle** — once in `_load_state` at startup and once at the top of every poll in `_poll_once` (`email_classifier_agent.py:239`). A retention of zero or less disables both (`:109-110`).
 7. **README's retention example describes the wrong case** — it says a re-received email would be reprocessed after N days. Gmail message IDs are unique per message, so a new copy is always new. The real effect is that an old message still unread in the inbox after N days is classified again.
 
 ## Work Required

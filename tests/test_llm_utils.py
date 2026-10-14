@@ -65,6 +65,7 @@ class TestNormalizeUrls:
             "Plain line with no links."
         )
 
+    # @spec INTAKE-TEXT-001
     def test_no_urls_is_identity(self):
         assert normalize_urls("nothing to see here") == "nothing to see here"
         assert normalize_urls("") == ""
@@ -113,6 +114,7 @@ class TestLogClassificationResult:
 
         assert "No labels predicted" in caplog.text
 
+    # @spec DECISION-LOG-001
     def test_log_with_long_subject(self, caplog):
         """Test logging with long email subject (should be truncated)."""
         import logging
@@ -128,6 +130,7 @@ class TestLogClassificationResult:
         # Should truncate at 50 chars
         assert caplog.text.count("A") <= 53  # 50 + '...'
 
+    # @spec DECISION-LOG-001
     def test_log_with_no_subject(self, caplog):
         """Test logging when email has no subject."""
         import logging
