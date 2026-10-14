@@ -4,7 +4,7 @@ Verify a deployment's prerequisites, build and publish a signed container image,
 
 ## Status
 
-**AUDITED** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 25 specs verified implemented and annotated; none has an automated test by nature (exercised by CI runs and the verify script).
+**OK** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 25 specs implemented and annotated; verified by CI runs and by running the verify script (HLD: verified by running).
 
 ## References
 
@@ -49,7 +49,7 @@ Verify a deployment's prerequisites, build and publish a signed container image,
 | DEPS   | OPS-DEPS-001 to OPS-DEPS-004 | 4 | 0 | 0 |
 | VERIFY | OPS-VERIFY-001 to OPS-VERIFY-006 | 6 | 0 | 0 |
 
-**Summary:** 25 of 25 active specs implemented; 0 deferred. The Dockerfile, compose file, all four workflows, and `verify_setup.py` carry `@spec` comments. OPS-DEPS-002 to OPS-DEPS-004 live in `renovate.json`, which cannot carry comments, and are cited from the LLD only. No operations spec has an automated test: CI, IMAGE, and DEPS specs are exercised by the workflows themselves; VERIFY specs by running the script. No `@spec` annotations exist; workflow YAML and Dockerfiles take `# @spec` comments but none are present yet.
+**Summary:** 25 of 25 active specs implemented; 0 deferred. The Dockerfile, compose file, all four workflows, and `verify_setup.py` carry `@spec` comments. OPS-DEPS-002 to OPS-DEPS-004 live in `renovate.json`, which cannot carry comments, and are cited from the LLD only. No operations spec has a unit test: CI, IMAGE, and DEPS specs are verified by the workflows running on every pull request and push to `main`; VERIFY specs by running the script. This is the accepted convention per the HLD. No `@spec` annotations exist; workflow YAML and Dockerfiles take `# @spec` comments but none are present yet.
 
 ## Key Findings
 

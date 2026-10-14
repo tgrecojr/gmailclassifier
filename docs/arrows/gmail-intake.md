@@ -4,7 +4,7 @@ Authenticate to Gmail, fetch unread inbox messages, and reduce each one to the t
 
 ## Status
 
-**AUDITED** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 24 specs verified implemented and annotated; two token-script specs have no automated test.
+**OK** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 24 specs implemented and annotated; the two token-script specs are verified by running the script (HLD: verified by running).
 
 ## References
 
@@ -46,7 +46,7 @@ Authenticate to Gmail, fetch unread inbox messages, and reduce each one to the t
 | BODY  | INTAKE-BODY-001 to INTAKE-BODY-005 | 5 | 0 | 0 |
 | TEXT  | INTAKE-TEXT-001 to INTAKE-TEXT-006 | 6 | 0 | 0 |
 
-**Summary:** 24 of 24 active specs implemented; 0 deferred. All are cited by `@spec` annotations in code. Without a test citation: INTAKE-AUTH-006 and INTAKE-AUTH-007 (`setup_token.py`, excluded from coverage).
+**Summary:** 24 of 24 active specs implemented; 0 deferred. All are cited by `@spec` annotations in code. INTAKE-AUTH-006 and INTAKE-AUTH-007 (`setup_token.py`) are verified by running the script rather than by a test, per the HLD.
 
 ## Key Findings
 

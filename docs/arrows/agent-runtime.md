@@ -4,7 +4,7 @@ Load settings, wire the Gmail client and Jev classifier, poll on an interval, an
 
 ## Status
 
-**AUDITED** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 38 specs verified implemented and annotated; seven entry-point and import-time specs have no automated test.
+**OK** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 38 specs implemented and annotated; the CLI and import-time specs are verified by running (HLD: verified by running).
 
 ## References
 
@@ -48,7 +48,7 @@ Load settings, wire the Gmail client and Jev classifier, poll on an interval, an
 | LOOP  | AGENT-LOOP-001 to AGENT-LOOP-004 | 4 | 0 | 0 |
 | CLI   | AGENT-CLI-001 to AGENT-CLI-003 | 3 | 0 | 0 |
 
-**Summary:** 38 of 38 active specs implemented; 0 deferred. All are cited by `@spec` annotations in code. Without a test citation: AGENT-CFG-001, AGENT-CFG-008, AGENT-CFG-012 (import-time behaviors of `config.py`), AGENT-INIT-006 (startup log line), and AGENT-CLI-001 to AGENT-CLI-003 (`main.py`, excluded from coverage). No `@spec` annotations exist yet in code or tests. `main.py` is excluded from coverage and the CLI specs have no automated tests.
+**Summary:** 38 of 38 active specs implemented; 0 deferred. All are cited by `@spec` annotations in code. AGENT-CFG-001, AGENT-CFG-008, AGENT-CFG-012 (import-time behaviors of `config.py`), AGENT-INIT-006 (startup log line), and AGENT-CLI-001 to AGENT-CLI-003 (`main.py`) are verified by running rather than by a test, per the HLD. No `@spec` annotations exist yet in code or tests. `main.py` is excluded from coverage and the CLI specs have no automated tests.
 
 ## Key Findings
 

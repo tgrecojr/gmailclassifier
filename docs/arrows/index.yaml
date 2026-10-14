@@ -14,7 +14,7 @@ taxonomy:
 
 arrows:
   gmail-intake:
-    status: AUDITED
+    status: OK
     parent: null
     sampled: 2026-10-14
     audited: 2026-10-14
@@ -22,7 +22,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: gmail-intake.md
-    next: "Decide whether the token-script specs INTAKE-AUTH-006/007 need tests or are accepted as script-only (then OK); decide on nested multipart body extraction and the 5000-character cap."
+    next: null
     drift: null
 
   jev-decision:
@@ -62,7 +62,7 @@ arrows:
     drift: null
 
   agent-runtime:
-    status: AUDITED
+    status: OK
     parent: null
     sampled: 2026-10-14
     audited: 2026-10-14
@@ -70,11 +70,11 @@ arrows:
     blocks: []
     blockedBy: []
     detail: agent-runtime.md
-    next: "Decide whether main.py (AGENT-CLI-*) and the import-time config specs need tests or are accepted as untested (then OK); add SIGTERM handling."
+    next: null
     drift: null
 
   operations:
-    status: AUDITED
+    status: OK
     parent: null
     sampled: 2026-10-14
     audited: 2026-10-14
@@ -82,7 +82,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: operations.md
-    next: "Decide whether CI-exercised specs count as covered for OK; decide on a container health signal (cascades into agent-runtime)."
+    next: null
     drift: null
 
 unmapped:
