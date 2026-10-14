@@ -34,7 +34,7 @@ arrows:
     blocks: []
     blockedBy: []
     detail: jev-decision.md
-    next: "Add @spec annotations to jev_classifier.py, llm_utils.py:72-87 and tests; correct the README's 'never sees label names' claim (doc-only)."
+    next: "Add @spec annotations to jev_classifier.py, llm_utils.py:72-87 and tests."
     drift: null
 
   gmail-actions:
