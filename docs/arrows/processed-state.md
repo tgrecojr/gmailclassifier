@@ -52,7 +52,7 @@ Persist the ledger of processed email IDs, migrate older file formats, and prune
 4. **A bad state file never stops the agent** — `load_state` (`state_store.py:37-42`) returns `{}` on any exception and logs at ERROR. Stated as design in the docstring.
 5. **Timestamp comparison drops anything it cannot compare** — `cleanup_old_entries` (`state_store.py:82-86`) catches `ValueError` and `TypeError`, so a naive timestamp would be pruned as invalid. No version of this project ever wrote naive timestamps (UTC-aware since the store was introduced; the legacy list had none), so this path is defensive.
 6. **Retention is applied twice per lifecycle** — once in `_load_state` at startup and once at the top of every poll in `_poll_once` (`email_classifier_agent.py:239`). A retention of zero or less disables both (`:109-110`).
-7. **README's retention example describes the wrong case** — it says a re-received email would be reprocessed after N days. Gmail message IDs are unique per message, so a new copy is always new. The real effect is that an old message still unread in the inbox after N days is classified again.
+7. **Retention acts on old unread mail, not re-received mail** — Gmail message IDs are unique per message, so a new copy is always new; the effect of expiry is that a message still unread in the inbox after N days is classified again. The README states this.
 
 ## Work Required
 
@@ -64,4 +64,3 @@ _None; the outcome-free ledger (finding 1) is accepted under the HLD tenet *clas
 
 ### Nice to Have
 1. Write the state file atomically (temp file then rename) so a crash cannot reset the ledger (finding 2).
-2. Correct the README's retention example (finding 7).

@@ -17,7 +17,6 @@ services:
       - .env
 
     environment:
-      - GMAIL_HEADLESS_MODE=true
       - LOG_LEVEL=INFO
 
     # Optional: Set resource limits

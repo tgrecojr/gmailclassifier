@@ -32,7 +32,7 @@ Verify a deployment's prerequisites, build and publish a signed container image,
 **Purpose:** Get a correct, current, verifiable build of the agent onto a host with as little manual work as possible, and tell the operator before the first run whether the host is ready.
 
 **Key Components:**
-1. `verify_setup.py` — pre-flight: Python version, required files, label-file content, API key presence, importable dependencies, and one paid probe of the decisions endpoint.
+1. `verify_setup.py` — pre-flight: Python version, credentials and label files, label-file content, API key presence, importable dependencies, and one paid probe of the decisions endpoint.
 2. `Dockerfile` — two-stage build on digest-pinned Chainguard Python images; `uv sync --frozen --no-dev` into a venv copied to a distroless runtime; runs as `nonroot`.
 3. `docker-compose.yml` — mounts credentials, token, and label config read-only plus a `./data` volume for the ledger.
 4. `test.yml` — on pull requests: unit tests with a 90% coverage floor, flake8, black, and an amd64 image build without push.
@@ -53,27 +53,18 @@ Verify a deployment's prerequisites, build and publish a signed container image,
 
 ## Key Findings
 
-1. **No container health check** — the Dockerfile has no `HEALTHCHECK` and the loop exposes no liveness signal. A hung poll (for example on the alpha decisions endpoint) is indistinguishable from a healthy idle agent to Docker or Compose.
-2. **The runtime Python version is pinned by digest, not by tag** — the Chainguard runtime is `python:latest@sha256:...` (`Dockerfile:25`) while CI installs 3.14 explicitly. Renovate's digest updates will track whatever `latest` becomes; the lockstep group keeps builder and runtime equal but does not hold the minor version.
-3. **A dead CI step** — the coverage badge step in `test.yml` is conditioned on `refs/heads/main`, but the workflow runs only on `pull_request`, so the step never executes.
-4. **mypy is a dev dependency that nothing runs** — present in `pyproject.toml`, absent from every workflow.
-5. **`verify_setup.py` requires a literal environment file** — `verify_setup.py:173` checks that `.env` exists, which fails in deployments that inject environment variables directly (ECS, Kubernetes) even when every variable is set.
-6. **A duplicated setting** — `GMAIL_HEADLESS_MODE=true` is set in both the Dockerfile and the compose `environment`.
-7. **Operator scripts ship in the image** — `COPY *.py` includes `setup_token.py` and `verify_setup.py`. Useful for `docker run ... verify_setup.py`; `setup_token.py` cannot work in a browserless container.
-8. **DEPLOYMENT.md drift** — it tells readers to "uncomment the COPY lines in Dockerfile"; no such lines exist. The ECS and Kubernetes sections are templates that nothing in the repository exercises.
-9. **The Socket organization is hardcoded** — `supply-chain.yml` passes `--org grecolabs`; the step self-skips when the secret is absent, so forks and bot PRs still pass.
+1. **No container health check, by decision** — the loop exposes no liveness signal. Docker and Compose would not restart an unhealthy container anyway, so a `HEALTHCHECK` is deferred until a hung loop is actually observed.
+2. **The runtime Python version is held by digest, not by tag** — Chainguard's public images publish only `latest`; the digest pin and the Renovate lockstep group hold builder and runtime together. Intended.
+3. **The Socket organization is hardcoded** — `supply-chain.yml` passes `--org grecolabs`; the step self-skips when the secret is absent, so forks and bot PRs still pass.
+4. **Operator scripts ship in the image** — `COPY *.py` includes `setup_token.py` and `verify_setup.py`. Kept: `verify_setup.py` in the image is useful and `setup_token.py` is harmless.
 
 ## Work Required
 
 ### Must Fix
-_None identified during mapping._
+_None._
 
 ### Should Fix
-1. Add a container health signal (a heartbeat file touched each poll and checked by `HEALTHCHECK`, or equivalent) so a hung loop is restartable (finding 1). Touching a heartbeat is an agent-runtime change; pause at that boundary.
+_None._
 
 ### Nice to Have
-2. Pin the Chainguard runtime to a minor-version tag alongside the digest, or document that `latest` is intended (finding 2).
-3. Remove the dead badge step; decide whether mypy runs in CI or leaves the dev dependencies (findings 3, 4).
-4. Let `verify_setup.py` accept a set environment without the file (finding 5).
-5. Drop the duplicated headless variable (finding 6).
-6. Fix the DEPLOYMENT.md COPY reference (finding 8).
+_None._

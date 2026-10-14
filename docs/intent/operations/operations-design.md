@@ -21,14 +21,13 @@ Principles:
 Runs five numbered check groups and prints a pass/fail line for each:
 
 1. **Python version** at least 3.14.
-2. **Required files**: the environment file, `credentials.json`, and the label file at `CLASSIFIER_CONFIG_PATH`. When the label file is present it is also opened: it must have labels and a description for every label; a leftover `classification_prompt` key earns a note that it can be removed.
+2. **Required files**: `credentials.json` and the label file at `CLASSIFIER_CONFIG_PATH`. When the label file is present it is also opened: it must have labels and a description for every label; a leftover `classification_prompt` key earns a note that it can be removed.
 3. **Environment**: `OPENROUTER_API_KEY` is set and is not a placeholder (contains `xxxx` or equals `your_openrouter_api_key`).
 4. **Dependencies**: `google.auth`, `google_auth_oauthlib`, `googleapiclient`, `httpx2`, and `dotenv` import.
 5. **Decisions endpoint**: when dependencies import, construct a `JevClassifier` with one probe label and send one decision (about $0.00002). On failure, HTTP 401 or 403 earns a hint that the key was rejected, 402 that the account has no credits.
 
 Exit 0 with the run command when every check passes; otherwise exit 1 with a pointer to the README.
 
-The environment-file check is a file-existence test. Deployments that inject variables without a file fail check 2 even when every variable is present.
 
 ## Container Image
 
@@ -45,18 +44,18 @@ The runtime image is distroless: no shell, no package manager. The process runs 
 
 `.dockerignore` excludes the environment file, credentials, token, tests, documentation other than the README, Docker files, caches, and agent tooling directories. Because the Dockerfile copies `*.py`, the two operator scripts are present in the image.
 
-`docker-compose.yml` runs the image with `restart: unless-stopped`, mounts `credentials.json`, `token.json`, and `classifier_config.json` read-only, mounts `./data` read-write for the ledger, loads the environment file, sets `GMAIL_HEADLESS_MODE=true` and `LOG_LEVEL=INFO`, and declares CPU and memory limits under `deploy.resources`.
+`docker-compose.yml` runs the image with `restart: unless-stopped`, mounts `credentials.json`, `token.json`, and `classifier_config.json` read-only, mounts `./data` read-write for the ledger, loads the environment file, sets `LOG_LEVEL=INFO`, and declares CPU and memory limits under `deploy.resources`.
 
 ## Pull-Request Gate: `test.yml`
 
 Three jobs on every pull request:
 
-- **test**: `astral-sh/setup-uv` with lock-keyed cache; `uv python install 3.14`; `uv sync --frozen`; `pytest tests/ -m unit` with coverage to terminal, XML, and HTML; upload to Codecov (non-fatal); upload the HTML report as an artifact; fail if XML line coverage is below 90%. A badge-generation step is conditioned on the `main` ref and never runs here.
+- **test**: `astral-sh/setup-uv` with lock-keyed cache; `uv python install 3.14`; `uv sync --frozen`; `pytest tests/ -m unit` with coverage to terminal, XML, and HTML; upload to Codecov (non-fatal); upload the HTML report as an artifact; fail if XML line coverage is below 90%.
 - **lint**: flake8 twice, first failing the job on syntax errors and undefined names only (`E9,F63,F7,F82`), then reporting everything else at `--max-complexity=10 --max-line-length=127` with exit-zero; then `black --check --diff`.
 
 - **build**: Buildx; build the image for `linux/amd64` with GitHub Actions cache and `push: false`, so Dockerfile and lockfile regressions fail the pull request.
 
-Only tests marked `unit` run. `integration` and `slow` markers are declared in `pyproject.toml` with no tests behind them. `mypy` is a dev dependency and is not run.
+Only tests marked `unit` run. `integration` and `slow` markers are declared in `pyproject.toml` with no tests behind them.
 
 ## Publish Pipeline: `docker-publish.yml` and `supply-chain.yml`
 
@@ -76,17 +75,16 @@ On push to `main`:
 - Major updates are never automerged and are labeled `major-update`.
 - The Chainguard builder and runtime images are grouped so they always move in one PR and the venv built on one matches the Python in the other.
 - Lockfile maintenance runs before 4am on Mondays. Vulnerability alerts are enabled and labeled `security`.
-- A rule for common infrastructure images (`postgres`, `nginx`, and others) with a 1-day age is present and matches nothing in this repository.
 
 ## Decisions & Alternatives
 
 | Decision | Chosen | Alternatives Considered | Rationale |
 |----------|--------|------------------------|-----------|
-| Base images | Chainguard Python, distroless runtime, digest-pinned, builder and runtime moved together | `python:slim`; Alpine; a single-stage image | Minimal attack surface and no shell in the runtime; the lockstep Renovate group exists so the venv copied from the builder always matches the runtime Python (`renovate.json` rule description). |
+| Base images | Chainguard Python `latest` and `latest-dev`, distroless runtime, digest-pinned, builder and runtime moved together | `python:slim`; Alpine; a single-stage image | Minimal attack surface and no shell in the runtime. Chainguard's public images publish only the `latest` tags, so the minor Python version is held by the digest pin and by the lockstep Renovate group, which exists so the venv copied from the builder always matches the runtime Python (`renovate.json` rule description). |
 | Dependency install | `uv sync --frozen --no-dev --no-install-project` from the committed lockfile, bytecode compiled | `pip install -r requirements.txt`; installing the project as a package | The lockfile is the source of truth and Renovate maintains it; `--frozen` guarantees the image matches it exactly; no dev tools in the runtime; precompiled bytecode shortens startup. |
 | Runtime user | `nonroot` | root | Least privilege; the process needs only to read mounted files and write `/app/data`. |
 | Secrets and config delivery | Read-only volume mounts and environment injection; nothing baked into the image | Build credentials and config into the image | Credentials and tokens must never be in a shippable artifact; the label file could be baked but is mounted for consistency (DEPLOYMENT "Security Best Practices"). |
-| Health check | None | `HEALTHCHECK` on a heartbeat file; an HTTP liveness endpoint | Never considered. Distroless images have no shell for a conventional check and the loop exposes no signal. Adding one is Deferred 1. |
+| Health check | None | `HEALTHCHECK` on a heartbeat file; an HTTP liveness endpoint | Docker and Compose do not restart an unhealthy container on their own, so a `HEALTHCHECK` would only change what `docker ps` shows. Not worth an agent-runtime change until a hung loop is actually observed. |
 | Publish trigger | Every push to `main`, gated by the supply-chain scan | Tagged releases; manual dispatch | One operator, one deployment: the newest `main` is the release. Scans run first so a vulnerable lockfile cannot ship. |
 | Image trust | Keyless cosign signature plus SBOM and provenance attestations | Unsigned images; key-based signing | Verifiable images with no key to manage; GitHub's OIDC identity is the signer. |
 | Architectures | `linux/amd64` only | amd64 and arm64 | The agent runs on one x86 host; an arm64 build and the QEMU step it needs add CI time for an image nobody pulls. |
@@ -103,17 +101,17 @@ On push to `main`:
 1. ✅ Build for `linux/amd64` only; the deployment has no ARM hosts.
 2. ✅ The pull-request coverage floor is 90%.
 3. ✅ The image is built, without pushing, on every pull request.
-4. ✅ The obsolete compose `version` key is gone.
+4. ✅ The obsolete compose `version` key is gone, and `GMAIL_HEADLESS_MODE` is set only in the Dockerfile.
+5. ✅ No container health check for now: nothing would act on it (see the Decisions table).
+6. ✅ The runtime tracks Chainguard's `latest` tag by digest; that is intended, since no versioned public tag exists.
+7. ✅ The dead coverage-badge step is removed; `mypy` is dropped from the dev dependencies rather than carried unenforced.
+8. ✅ `verify_setup.py` no longer requires an environment file to exist; it checks the variables themselves.
+9. ✅ DEPLOYMENT.md is trimmed to the Gmail token, Docker Compose, and systemd; the ECS and Kubernetes templates and the unverified console-flow instructions are gone.
+10. ✅ `setup_token.py` stays in the image; harmless, and `verify_setup.py` beside it is useful.
+11. ✅ The Renovate rule for `postgres`, `nginx`, and similar images is removed.
 
 ### Deferred
-1. Add a liveness signal and `HEALTHCHECK` so a hung poll is restarted. The signal (for example a heartbeat file touched each cycle) would be an agent-runtime change.
-2. Pin the Chainguard runtime to a minor-version tag alongside the digest, or record that tracking `latest` is intended.
-3. Remove the badge step that never runs. Decide whether `mypy` should run in CI or leave the dev dependencies.
-4. Let `verify_setup.py` pass when variables are set without an environment file.
-5. `GMAIL_HEADLESS_MODE=true` is set in both the Dockerfile and the compose `environment`; drop one.
-6. DEPLOYMENT.md refers to Dockerfile COPY lines that do not exist, and its ECS and Kubernetes sections are untested templates. Correct or trim.
-7. Should `setup_token.py` be excluded from the image, since it cannot run without a browser?
-8. The Renovate rule for `postgres`, `nginx`, and similar images matches nothing here; remove or keep as shared policy.
+_None._
 
 ## References
 

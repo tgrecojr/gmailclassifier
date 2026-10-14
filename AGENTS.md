@@ -32,8 +32,8 @@ Six design segments, named for the stage of an email's path they own. See `docs/
 
 | Segment | Prefix | Code | Owns |
 |---|---|---|---|
-| gmail-intake | `INTAKE` | `gmail_client.py` (auth and read side), `llm_utils.py`, `setup_token.py` | OAuth, fetching unread mail, body extraction, URL and HTML reduction |
-| jev-decision | `DECISION` | `jev_classifier.py`, `llm_utils.log_classification_result` | Jev request shape, one-retry transport, threshold rule, label validation |
+| gmail-intake | `INTAKE` | `gmail_client.py` (auth and read side), `mail_text.py`, `setup_token.py` | OAuth, fetching unread mail, body extraction, URL and HTML reduction |
+| jev-decision | `DECISION` | `jev_classifier.py` | Jev request shape, one-retry transport, threshold rule, label validation |
 | gmail-actions | `ACTIONS` | `gmail_client.py` (write side) | Ensuring labels exist, adding labels, archiving |
 | processed-state | `STATE` | `state_store.py`, agent state methods | The processed-id ledger, legacy migration, retention |
 | agent-runtime | `AGENT` | `email_classifier_agent.py` (policy and loop), `config.py`, `main.py` | Settings, startup order, per-email policy, dry run, poll loop |

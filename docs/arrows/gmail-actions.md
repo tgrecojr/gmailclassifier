@@ -21,7 +21,7 @@ Create Gmail labels and modify messages: add label IDs, optionally archive.
 - tests/test_gmail_client.py (`TestCreateLabelIfNotExists`, `TestAddLabelsToMessage`)
 
 ### Code
-- gmail_client.py:207-281 (`create_label_if_not_exists`, `add_labels_to_message`)
+- gmail_client.py:229-303 (`create_label_if_not_exists`, `add_labels_to_message`)
 
 ## Architecture
 

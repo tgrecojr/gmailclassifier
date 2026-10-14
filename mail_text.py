@@ -1,5 +1,5 @@
 """
-Text preparation shared by the Gmail client and the classifier.
+Text reduction shared by the Gmail client and the classifier.
 
 Everything here reduces an email to the text that carries classification
 signal: tracking-link paths and HTML markup are noise to the model and, in the
@@ -70,22 +70,3 @@ def strip_html(text: str) -> str:
     text = re.sub(r"[ \t\r\f\v\u00a0]+", " ", text)
     text = re.sub(r" *\n[ \n]*", "\n", text)
     return text.strip()
-
-
-# @spec DECISION-LOG-001
-def log_classification_result(email: dict, labels: list[str], provider: str):
-    """
-    Log the classification result in a consistent format.
-
-    Args:
-        email: Email dictionary
-        labels: Predicted labels
-        provider: Provider name for logging
-    """
-    subject = email.get("subject", "No Subject")
-    if labels:
-        logger.info(
-            f"[{provider}] Classified '{subject[:50]}...' with labels: {labels}"
-        )
-    else:
-        logger.warning(f"[{provider}] No labels predicted for '{subject[:50]}...'")

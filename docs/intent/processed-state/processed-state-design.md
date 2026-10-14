@@ -84,11 +84,11 @@ The practical effect of expiry: a message that is still unread in the inbox afte
 
 ### Resolved
 1. ✅ Ledger entries record only that an email was handled, not how. Under the HLD tenet *classify once over classify eventually*, every outcome ends with the id in the ledger and none is retried, so a per-entry outcome has no consumer. Recording one would only matter if that tenet were reversed.
+2. ✅ The README's retention example now describes the real effect: a message still unread after the retention window is classified again; a newly received message always has a new id.
 
 ### Deferred
 1. Should saves be atomic (write to a temp file, then rename) so a crash mid-write cannot reset the ledger?
 2. Is one write per email still the right cadence, or should the agent save once per poll?
-3. The README's retention example ("if you receive the same email again after 30 days") describes a case that cannot happen; the real effect is on old messages still unread in the inbox. Correct the README.
 
 ## References
 

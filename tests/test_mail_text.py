@@ -1,20 +1,14 @@
 """
-Unit tests for llm_utils.py
+Unit tests for mail_text.py
 
 Tests cover:
 - URL normalization (scheme + host only)
 - HTML detection and reduction to visible text
-- Classification result logging
 """
 
 import pytest
 
-from llm_utils import (
-    log_classification_result,
-    looks_like_html,
-    normalize_urls,
-    strip_html,
-)
+from mail_text import looks_like_html, normalize_urls, strip_html
 
 
 @pytest.mark.unit
@@ -75,75 +69,6 @@ class TestNormalizeUrls:
         once = normalize_urls("https://x.example.com/a?b=c")
 
         assert normalize_urls(once) == once
-
-
-@pytest.mark.unit
-class TestLogClassificationResult:
-    """Test classification result logging."""
-
-    # @spec DECISION-LOG-001
-    def test_log_with_labels(self, caplog):
-        """Test logging when labels are predicted."""
-        import logging
-
-        caplog.set_level(logging.INFO)
-
-        email = {"subject": "Test Email Subject"}
-        labels = ["AWS", "Finance"]
-        provider = "TestProvider"
-
-        log_classification_result(email, labels, provider)
-
-        assert "TestProvider" in caplog.text
-        assert "Test Email Subject" in caplog.text
-        assert "AWS" in caplog.text
-        assert "Finance" in caplog.text
-
-    # @spec DECISION-LOG-001
-    def test_log_without_labels(self, caplog):
-        """Test logging when no labels are predicted."""
-        import logging
-
-        caplog.set_level(logging.WARNING)
-
-        email = {"subject": "Test Email"}
-        labels = []
-        provider = "TestProvider"
-
-        log_classification_result(email, labels, provider)
-
-        assert "No labels predicted" in caplog.text
-
-    # @spec DECISION-LOG-001
-    def test_log_with_long_subject(self, caplog):
-        """Test logging with long email subject (should be truncated)."""
-        import logging
-
-        caplog.set_level(logging.INFO)
-
-        email = {"subject": "A" * 100}
-        labels = ["AWS"]
-        provider = "TestProvider"
-
-        log_classification_result(email, labels, provider)
-
-        # Should truncate at 50 chars
-        assert caplog.text.count("A") <= 53  # 50 + '...'
-
-    # @spec DECISION-LOG-001
-    def test_log_with_no_subject(self, caplog):
-        """Test logging when email has no subject."""
-        import logging
-
-        caplog.set_level(logging.INFO)
-
-        email = {}
-        labels = ["AWS"]
-        provider = "TestProvider"
-
-        log_classification_result(email, labels, provider)
-
-        assert "No Subject" in caplog.text
 
 
 @pytest.mark.unit

@@ -170,7 +170,6 @@ def main():
     print()
 
     print("2. Required Files")
-    checks.append(check_file_exists(".env", ".env configuration file"))
     checks.append(check_file_exists("credentials.json", "Gmail OAuth credentials"))
     classifier_config = os.getenv("CLASSIFIER_CONFIG_PATH", "classifier_config.json")
     config_present = check_file_exists(classifier_config, "Classifier config")

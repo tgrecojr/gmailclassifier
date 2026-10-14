@@ -35,7 +35,7 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 ## Pre-flight Verification
 
 - [x] **OPS-VERIFY-001**: When the verification script runs, it shall report failure if the Python version is below 3.14.
-- [x] **OPS-VERIFY-002**: When the verification script runs, it shall report whether the environment file, `credentials.json`, and the label file at `CLASSIFIER_CONFIG_PATH` exist, and when the label file exists shall report failure unless it has labels and a non-empty description for each, noting any leftover `classification_prompt` key.
+- [x] **OPS-VERIFY-002**: When the verification script runs, it shall report whether `credentials.json` and the label file at `CLASSIFIER_CONFIG_PATH` exist, and when the label file exists shall report failure unless it has labels and a non-empty description for each, noting any leftover `classification_prompt` key.
 - [x] **OPS-VERIFY-003**: When the verification script runs, it shall report failure if `OPENROUTER_API_KEY` is unset, blank, or a placeholder (contains `xxxx` or equals `your_openrouter_api_key`).
 - [x] **OPS-VERIFY-004**: When the verification script runs, it shall report failure for each of `google.auth`, `google_auth_oauthlib`, `googleapiclient`, `httpx2`, and `dotenv` that cannot be imported.
 - [x] **OPS-VERIFY-005**: When all dependencies import and an API key is set, the verification script shall send one decision request with a single probe label to the configured model and report success on a valid answer; on HTTP 401 or 403 it shall hint that the key was rejected and on HTTP 402 that the account has no credits.
