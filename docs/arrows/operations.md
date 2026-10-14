@@ -4,7 +4,7 @@ Verify a deployment's prerequisites, build and publish a signed container image,
 
 ## Status
 
-**MAPPED** — sampled 2026-10-14 (git SHA `08bbc6be6f312e7b4699611f03ec69a733093374`). Segment identified and documented from code; specs not yet verified against code by an audit pass.
+**AUDITED** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 25 specs verified implemented and annotated; none has an automated test by nature (exercised by CI runs and the verify script).
 
 ## References
 
@@ -54,10 +54,10 @@ Verify a deployment's prerequisites, build and publish a signed container image,
 ## Key Findings
 
 1. **No container health check** — the Dockerfile has no `HEALTHCHECK` and the loop exposes no liveness signal. A hung poll (for example on the alpha decisions endpoint) is indistinguishable from a healthy idle agent to Docker or Compose.
-2. **The runtime Python version is pinned by digest, not by tag** — the Chainguard runtime is `python:latest@sha256:...` (`Dockerfile:24`) while CI installs 3.14 explicitly. Renovate's digest updates will track whatever `latest` becomes; the lockstep group keeps builder and runtime equal but does not hold the minor version.
+2. **The runtime Python version is pinned by digest, not by tag** — the Chainguard runtime is `python:latest@sha256:...` (`Dockerfile:25`) while CI installs 3.14 explicitly. Renovate's digest updates will track whatever `latest` becomes; the lockstep group keeps builder and runtime equal but does not hold the minor version.
 3. **A dead CI step** — the coverage badge step in `test.yml` is conditioned on `refs/heads/main`, but the workflow runs only on `pull_request`, so the step never executes.
 4. **mypy is a dev dependency that nothing runs** — present in `pyproject.toml`, absent from every workflow.
-5. **`verify_setup.py` requires a literal environment file** — `verify_setup.py:167` checks that `.env` exists, which fails in deployments that inject environment variables directly (ECS, Kubernetes) even when every variable is set.
+5. **`verify_setup.py` requires a literal environment file** — `verify_setup.py:173` checks that `.env` exists, which fails in deployments that inject environment variables directly (ECS, Kubernetes) even when every variable is set.
 6. **A duplicated setting** — `GMAIL_HEADLESS_MODE=true` is set in both the Dockerfile and the compose `environment`.
 7. **Operator scripts ship in the image** — `COPY *.py` includes `setup_token.py` and `verify_setup.py`. Useful for `docker run ... verify_setup.py`; `setup_token.py` cannot work in a browserless container.
 8. **DEPLOYMENT.md drift** — it tells readers to "uncomment the COPY lines in Dockerfile"; no such lines exist. The ECS and Kubernetes sections are templates that nothing in the repository exercises.

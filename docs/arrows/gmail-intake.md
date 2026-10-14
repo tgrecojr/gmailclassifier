@@ -4,7 +4,7 @@ Authenticate to Gmail, fetch unread inbox messages, and reduce each one to the t
 
 ## Status
 
-**MAPPED** — sampled 2026-10-14 (git SHA `08bbc6be6f312e7b4699611f03ec69a733093374`). Segment identified and documented from code; specs not yet verified against code by an audit pass.
+**AUDITED** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 24 specs verified implemented and annotated; two token-script specs have no automated test.
 
 ## References
 
@@ -22,7 +22,7 @@ Authenticate to Gmail, fetch unread inbox messages, and reduce each one to the t
 - tests/test_llm_utils.py
 
 ### Code
-- gmail_client.py:16-198 (`_decode`, `GmailClient.__init__`, `_authenticate`, `_run_console_flow`, `get_unread_messages`, `_get_message_details`, `_get_message_body`)
+- gmail_client.py:17-204 (`_decode`, `GmailClient.__init__`, `_authenticate`, `_run_console_flow`, `get_unread_messages`, `_get_message_details`, `_get_message_body`)
 - llm_utils.py (all)
 - setup_token.py (operator script that drives the browser OAuth path)
 
@@ -50,13 +50,13 @@ Authenticate to Gmail, fetch unread inbox messages, and reduce each one to the t
 
 ## Key Findings
 
-1. **Token is pickled at a `.json` path** — `gmail_client.py:43-44` and `:65-66` use `pickle.load`/`pickle.dump` on `token_path`, whose default is `token.json`. The file is not JSON. `.gitignore` still lists `token.pickle`, suggesting the path name changed without the format.
-2. **Body extraction only inspects top-level MIME parts** — `gmail_client.py:184-192` iterates `payload["parts"]` one level deep. A `multipart/mixed` wrapping a `multipart/alternative` (common with attachments) yields an empty body; the jev-decision segment then falls back to Gmail's `snippet`.
-3. **URL reduction runs before the 5000-character cap on purpose** — `gmail_client.py:157-166`. The jev-decision segment repeats both URL reduction and HTML stripping in `build_state`; both are idempotent, so this is redundancy rather than a defect.
-4. **A failed list call silently skips the whole poll** — `gmail_client.py:131-133` logs and returns `[]` on `HttpError`, which the agent cannot distinguish from "no unread mail".
-5. **Headless OAuth blocks on stdin** — `gmail_client.py:89` calls `input()`. In a container without a TTY this raises `EOFError` rather than printing a usable error. The documented workaround is to generate the token elsewhere with `setup_token.py`.
-6. **Browser OAuth hardcodes the redirect port** — `gmail_client.py:62` uses `run_local_server(port=8080)`. DEPLOYMENT.md describes a `http://localhost:1` redirect URI for the console flow; the code does not set one, so the documented URI is unverified against behavior.
-7. **HTML detection needs a structural tag** — `llm_utils.py:35-37` matches `html`, `body`, `div`, `p`, `br`, `table`, `tr`, `td`, `span`, `a`, `img`. Inline-only markup such as a lone `<b>` is treated as plain text, by design.
+1. **Token is pickled at a `.json` path** — `gmail_client.py:46` and `:68` use `pickle.load`/`pickle.dump` on `token_path`, whose default is `token.json`. The file is not JSON. `.gitignore` still lists `token.pickle`, suggesting the path name changed without the format.
+2. **Body extraction only inspects top-level MIME parts** — `gmail_client.py:191-199` iterates `payload["parts"]` one level deep. A `multipart/mixed` wrapping a `multipart/alternative` (common with attachments) yields an empty body; the jev-decision segment then falls back to Gmail's `snippet`.
+3. **URL reduction runs before the 5000-character cap on purpose** — `gmail_client.py:162-171`. The jev-decision segment repeats both URL reduction and HTML stripping in `build_state`; both are idempotent, so this is redundancy rather than a defect.
+4. **A failed list call silently skips the whole poll** — `gmail_client.py:136-138` logs and returns `[]` on `HttpError`, which the agent cannot distinguish from "no unread mail".
+5. **Headless OAuth blocks on stdin** — `gmail_client.py:92` calls `input()`. In a container without a TTY this raises `EOFError` rather than printing a usable error. The documented workaround is to generate the token elsewhere with `setup_token.py`.
+6. **Browser OAuth hardcodes the redirect port** — `gmail_client.py:64` uses `run_local_server(port=8080)`. DEPLOYMENT.md describes a `http://localhost:1` redirect URI for the console flow; the code does not set one, so the documented URI is unverified against behavior.
+7. **HTML detection needs a structural tag** — `llm_utils.py:36-38` matches `html`, `body`, `div`, `p`, `br`, `table`, `tr`, `td`, `span`, `a`, `img`. Inline-only markup such as a lone `<b>` is treated as plain text, by design.
 
 ## Work Required
 

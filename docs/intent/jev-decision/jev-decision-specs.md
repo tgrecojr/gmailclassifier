@@ -46,4 +46,4 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 
 ## Result Logging
 
-- [x] **DECISION-LOG-001**: When `classify_email` completes a selection, the classifier shall log the provider host, the first 50 characters of the subject, and the selected labels at INFO level, or a "no labels predicted" message at WARNING level when none were selected.
+- [x] **DECISION-LOG-001**: When `classify_email` completes a selection, the classifier shall log the provider host, the first 50 characters of the subject (`No Subject` when the record has none), and the selected labels at INFO level, or a "no labels predicted" message at WARNING level when none were selected.

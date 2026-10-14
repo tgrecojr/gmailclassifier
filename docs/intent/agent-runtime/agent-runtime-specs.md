@@ -20,6 +20,7 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 - [x] **AGENT-CFG-012**: The agent shall read the Gmail credentials path (default `credentials.json`) and token path (default `token.json`) from the environment and shall request only the `https://www.googleapis.com/auth/gmail.modify` scope.
 - [x] **AGENT-CFG-013**: The agent shall treat `GMAIL_HEADLESS_MODE`, `REMOVE_FROM_INBOX`, and `DRY_RUN` as true only when the value equals `true` case-insensitively, with defaults of false, true, and false respectively.
 - [x] **AGENT-CFG-014**: The agent shall read `POLL_INTERVAL_SECONDS` (default 60), `MAX_EMAILS_PER_POLL` (default 10), `STATE_RETENTION_DAYS` (default 30) as integers, `STATE_FILE` (default `.email_state.json`), and `LOG_LEVEL` (default `INFO`) from the environment.
+- [x] **AGENT-CFG-015**: The agent shall read `OPENROUTER_API_KEY` from the environment as the bearer token for the decisions endpoint; an unset or blank key is not detected at import and surfaces on the first request.
 
 ## Startup
 

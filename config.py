@@ -82,6 +82,7 @@ except (FileNotFoundError, ValueError) as e:
     raise
 
 # OpenRouter API Configuration
+# @spec AGENT-CFG-015
 # OPENROUTER_API_KEY is sent as the bearer token to OpenRouter's decisions
 # endpoint (jev_classifier.OPENROUTER_DECISIONS_URL).
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")

@@ -151,6 +151,7 @@ class TestBuildQuestions:
 
 @pytest.mark.unit
 class TestValidateLabels:
+    # @spec DECISION-CFG-001, DECISION-CFG-002, DECISION-CFG-003, DECISION-CFG-004
     def test_accepts_valid_config(self):
         validate_labels(LABELS, DESCRIPTIONS)
 
