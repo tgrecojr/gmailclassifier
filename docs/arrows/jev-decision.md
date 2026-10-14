@@ -1,0 +1,73 @@
+# Arrow: jev-decision
+
+Turn one email record into a Jev decisions request, call OpenRouter with one retry, and apply the threshold rule that picks the labels.
+
+## Status
+
+**MAPPED** — sampled 2026-10-14 (git SHA `08bbc6be6f312e7b4699611f03ec69a733093374`). Segment identified and documented from code; specs not yet verified against code by an audit pass.
+
+## References
+
+### HLD
+- docs/high-level-design.md (System Design: decision stage)
+
+### LLD
+- docs/intent/jev-decision/jev-decision-design.md
+
+### EARS
+- docs/intent/jev-decision/jev-decision-specs.md (29 specs)
+
+### Tests
+- tests/test_jev_classifier.py (all classes)
+- tests/test_llm_utils.py (`TestLogClassificationResult`)
+
+### Code
+- jev_classifier.py (all)
+- llm_utils.py:72-87 (`log_classification_result`, called only from this segment)
+
+## Architecture
+
+**Purpose:** Be the only place that knows the shape of a Jev decisions request and the rule that turns its answers into labels. Callers hand in an email record and get back a list of configured label names, or an empty list.
+
+**Key Components:**
+1. `build_state` — the email as a named-field object (`from`, `subject`, `date`, `body`) with HTML reduced, URLs cut to host, body capped at 5000 characters.
+2. `build_questions` / `question_key` — one Noul (yes/no probability) per label plus one Choice across all labels and a `None` option.
+3. `validate_labels` — fail-fast checks on the label set; also called by `config.py` at startup.
+4. `select_labels` — the pure decision rule: every Noul at or above the label threshold, else the Choice if confident and not `None`.
+5. `JevClassifier` — holds an `httpx2` client with bearer auth, posts with one retry, parses `answers`, and wraps everything in `classify_email`, which never raises.
+
+## Spec Coverage
+
+| Facet | Spec IDs | Implemented | Deferred | Gaps |
+|-------|----------|-------------|----------|------|
+| REQ   | DECISION-REQ-001 to DECISION-REQ-009 | 9 | 0 | 0 |
+| SEL   | DECISION-SEL-001 to DECISION-SEL-005 | 5 | 0 | 0 |
+| HTTP  | DECISION-HTTP-001 to DECISION-HTTP-009 | 9 | 0 | 0 |
+| CFG   | DECISION-CFG-001 to DECISION-CFG-005 | 5 | 0 | 0 |
+| LOG   | DECISION-LOG-001 | 1 | 0 | 0 |
+
+**Summary:** 29 of 29 active specs observed implemented; 0 deferred. No `@spec` annotations exist yet in code or tests. Retry on HTTP 500 and 504 (DECISION-HTTP-003) is implemented but only 429, 502, and 503 are exercised by tests.
+
+## Key Findings
+
+1. **README overstates what Jev does not see** — README says "Jev never sees label *names*, only the descriptions". `jev_classifier.py:80` puts the label name inside each Noul's instructions ("Does this email belong under the label 'Finance'?") and `:86` uses label names as the Choice criteria keys. Descriptions are the criteria, but names are in the request.
+2. **Every failure collapses to "no labels"** — `classify_email` (`jev_classifier.py:235-246`) catches `JevRequestError` and returns `[]`. The caller cannot tell a transport outage from a confident "nothing fits", and the agent-runtime segment marks the email processed either way. Accepted under the HLD tenet *classify once over classify eventually*.
+3. **Retry policy is fixed and minimal** — `MAX_ATTEMPTS = 2`, one sleep of `retry_delay_seconds` (default 1.0), `RETRYABLE_STATUSES = {429, 500, 502, 503, 504}` (`:42-43`, `:183-205`). `Retry-After` headers are ignored; there is no backoff or jitter.
+4. **Missing API key is not detected here** — the constructor builds `Authorization: Bearer {api_key}` (`:173`) without checking for `None` or empty. A missing key surfaces as HTTP 401 on the first email.
+5. **Body cap and text reduction are duplicated with gmail-intake** — `BODY_MAX_CHARS = 5000` (`:41`) and the reduction in `build_state` (`:57-71`) repeat what the Gmail client already did. Both are idempotent. The duplication makes the classifier correct for any caller (the setup-verification probe bypasses the Gmail client), at the cost of two owners for one number.
+6. **Booleans count as probabilities** — `_probability` (`:96-97`) accepts anything `isinstance(..., (int, float))`, which includes `bool`. A `noul: true` would read as 1.0. Not observed from the live endpoint; noted as an edge.
+7. **Pure rule is cleanly separable from transport** — `build_state`, `build_questions`, `select_labels`, and `validate_labels` take and return plain dicts and lists. Tests exercise the HTTP layer through `httpx2.MockTransport` and assert the exact request body.
+
+## Work Required
+
+### Must Fix
+_None identified during mapping._
+
+### Should Fix
+1. Align README's "never sees label names" claim with `build_questions`, or change `build_questions` to omit names (finding 1).
+
+### Nice to Have
+2. Validate `api_key` at construction so a missing key fails at startup rather than on the first email (finding 4).
+3. Honor `Retry-After` on 429 (finding 3).
+4. Settle one owner for the 5000-character cap with gmail-intake (finding 5; gmail-intake LLD Deferred 9).
+5. Reject or coerce boolean `noul` values explicitly (finding 6).
