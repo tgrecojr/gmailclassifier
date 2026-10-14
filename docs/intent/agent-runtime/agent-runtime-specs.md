@@ -47,7 +47,7 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 
 - [x] **AGENT-LOOP-001**: On each poll cycle, the agent shall prune the ledger, fetch up to `MAX_EMAILS_PER_POLL` unread inbox messages, process each in order, log how many processing calls returned true out of how many were fetched, and sleep `POLL_INTERVAL_SECONDS`.
 - [x] **AGENT-LOOP-002**: When a poll cycle fetches no unread messages, the agent shall log at DEBUG and sleep the poll interval.
-- [ ] **AGENT-LOOP-003**: If an exception escapes a poll cycle, then the agent shall log it and sleep before the next cycle, with the sleep doubling on each consecutive failed cycle from `POLL_INTERVAL_SECONDS` up to ten times `POLL_INTERVAL_SECONDS`, and resetting to `POLL_INTERVAL_SECONDS` after a cycle completes without an exception.
+- [x] **AGENT-LOOP-003**: If an exception escapes a poll cycle, then the agent shall log it and sleep before the next cycle, with the sleep doubling on each consecutive failed cycle from `POLL_INTERVAL_SECONDS` up to ten times `POLL_INTERVAL_SECONDS`, and resetting to `POLL_INTERVAL_SECONDS` after a cycle completes without an exception.
 - [x] **AGENT-LOOP-004**: When the poll loop receives a keyboard interrupt, the agent shall stop polling and log that it has stopped.
 
 ## Entry Point

@@ -9,6 +9,10 @@ from jev_classifier import OPENROUTER_DECISIONS_URL, JevClassifier
 
 logger = logging.getLogger(__name__)
 
+# After consecutive failed poll cycles the retry delay doubles from
+# POLL_INTERVAL_SECONDS up to this many times the interval.
+MAX_BACKOFF_MULTIPLIER = 10
+
 
 class EmailClassifierAgent:
     """Main agent for classifying and labeling Gmail emails."""
@@ -206,6 +210,35 @@ class EmailClassifierAgent:
             logger.warning(f"No labels predicted for email: {subject}")
         self._mark_processed(email["id"])
 
+    @staticmethod
+    def _backoff_seconds(consecutive_failures: int) -> float:
+        """
+        Sleep after a failed poll cycle: the poll interval, doubled for each
+        further consecutive failure, capped at MAX_BACKOFF_MULTIPLIER times
+        the interval. A successful cycle resets the count.
+        """
+        interval = config.POLL_INTERVAL_SECONDS
+        multiplier = min(2 ** (consecutive_failures - 1), MAX_BACKOFF_MULTIPLIER)
+        return interval * multiplier
+
+    def _poll_once(self) -> None:
+        """One poll cycle: prune state, fetch unread mail, process each email."""
+        logger.info("=== Checking for new emails ===")
+
+        # Cleanup old state entries periodically
+        self.processed_emails = self._cleanup_old_state(self.processed_emails)
+
+        emails = self.gmail_client.get_unread_messages(
+            max_results=config.MAX_EMAILS_PER_POLL
+        )
+        if not emails:
+            logger.debug("No unread emails to process")
+            return
+
+        processed_count = sum(1 for email in emails if self.process_email(email))
+        logger.info(f"=== Processed {processed_count} out of {len(emails)} emails ===")
+
+    # @spec AGENT-LOOP-001, AGENT-LOOP-002, AGENT-LOOP-003, AGENT-LOOP-004
     def run_continuous(self):
         """
         Run the agent continuously, polling for new emails.
@@ -213,33 +246,14 @@ class EmailClassifierAgent:
         logger.info(
             f"Starting continuous email classifier agent (polling every {config.POLL_INTERVAL_SECONDS}s)"
         )
+        consecutive_failures = 0
 
         while True:
             try:
-                logger.info("=== Checking for new emails ===")
-
-                # Cleanup old state entries periodically
-                self.processed_emails = self._cleanup_old_state(self.processed_emails)
-
-                # Get unread emails
-                emails = self.gmail_client.get_unread_messages(
-                    max_results=config.MAX_EMAILS_PER_POLL
-                )
-
-                if not emails:
-                    logger.debug("No unread emails to process")
-                else:
-                    # Process each email
-                    processed_count = 0
-                    for email in emails:
-                        if self.process_email(email):
-                            processed_count += 1
-
-                    logger.info(
-                        f"=== Processed {processed_count} out of {len(emails)} emails ==="
-                    )
+                self._poll_once()
 
                 # Wait before next poll
+                consecutive_failures = 0
                 logger.debug(f"Sleeping for {config.POLL_INTERVAL_SECONDS} seconds...")
                 time.sleep(config.POLL_INTERVAL_SECONDS)
 
@@ -247,10 +261,13 @@ class EmailClassifierAgent:
                 logger.info("Received interrupt signal, shutting down gracefully...")
                 break
             except Exception as e:
+                consecutive_failures += 1
+                delay = self._backoff_seconds(consecutive_failures)
                 logger.error(f"Error in continuous loop: {e}")
                 logger.info(
-                    f"Waiting {config.POLL_INTERVAL_SECONDS} seconds before retry..."
+                    f"Waiting {delay:g} seconds before retry "
+                    f"(consecutive failures: {consecutive_failures})..."
                 )
-                time.sleep(config.POLL_INTERVAL_SECONDS)
+                time.sleep(delay)
 
         logger.info("Email Classifier Agent stopped")

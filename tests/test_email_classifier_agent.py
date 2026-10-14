@@ -355,6 +355,7 @@ class TestStateTracking:
 
 @pytest.mark.unit
 class TestRunContinuous:
+    # @spec AGENT-LOOP-001, AGENT-LOOP-004
     def test_one_poll_processes_then_stops_on_interrupt(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -369,6 +370,22 @@ class TestRunContinuous:
         assert set(agent.processed_emails) == {"a", "b"}
         mock_gmail_client.get_unread_messages.assert_called_once_with(max_results=10)
 
+    # @spec AGENT-LOOP-002
+    def test_empty_inbox_sleeps_without_classifying(
+        self, mock_config, mock_gmail_client, mock_classifier
+    ):
+        mock_config.POLL_INTERVAL_SECONDS = 0
+        mock_config.MAX_EMAILS_PER_POLL = 10
+        mock_gmail_client.get_unread_messages.return_value = []
+        agent = EmailClassifierAgent()
+
+        with patch("email_classifier_agent.time.sleep", side_effect=KeyboardInterrupt):
+            agent.run_continuous()
+
+        mock_classifier.classify_email.assert_not_called()
+        assert agent.processed_emails == {}
+
+    # @spec AGENT-LOOP-003
     def test_loop_survives_gmail_errors(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
@@ -388,3 +405,29 @@ class TestRunContinuous:
 
         assert set(agent.processed_emails) == {"a"}
         assert mock_gmail_client.get_unread_messages.call_count == 2
+
+    # @spec AGENT-LOOP-003
+    def test_failed_cycles_back_off_exponentially_and_reset_on_success(
+        self, mock_config, mock_gmail_client, mock_classifier
+    ):
+        mock_config.POLL_INTERVAL_SECONDS = 60
+        mock_config.MAX_EMAILS_PER_POLL = 10
+        down = RuntimeError("gmail down")
+        mock_gmail_client.get_unread_messages.side_effect = [
+            down,
+            down,
+            down,
+            down,
+            down,  # five consecutive failures
+            [_email("a")],  # success resets the backoff
+            down,  # a fresh failure starts over at one interval
+            KeyboardInterrupt,  # end the loop from inside the poll body
+        ]
+        agent = EmailClassifierAgent()
+        sleeps = []
+
+        with patch("email_classifier_agent.time.sleep", side_effect=sleeps.append):
+            agent.run_continuous()
+
+        # doubles from the interval, capped at ten times the interval
+        assert sleeps == [60, 120, 240, 480, 600, 60, 60]
