@@ -1,5 +1,4 @@
-version: '3.8'
-
+# @spec OPS-IMAGE-006
 services:
   gmail-classifier:
     build: .

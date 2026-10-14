@@ -16,14 +16,14 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 ## Continuous Integration and Publishing
 
 - [x] **OPS-CI-001**: When a pull request is opened or updated, CI shall install Python 3.14 and the frozen lockfile with uv and run the tests marked `unit` with coverage reported to terminal, XML, and HTML.
-- [ ] **OPS-CI-002**: If pull-request line coverage is below 90%, then the test job shall fail.
+- [x] **OPS-CI-002**: If pull-request line coverage is below 90%, then the test job shall fail.
 - [x] **OPS-CI-003**: When a pull request is opened or updated, the lint job shall fail on flake8 syntax errors and undefined names (`E9`, `F63`, `F7`, `F82`) and shall report all other flake8 findings without failing.
 - [x] **OPS-CI-004**: If `black --check` reports any file that would be reformatted, then the lint job shall fail.
 - [x] **OPS-CI-005**: When a commit is pushed to `main`, the publish workflow shall run the supply-chain scan first and shall build the image only if the scan succeeds.
-- [ ] **OPS-CI-006**: When publishing, CI shall build a `linux/amd64` image (no other architectures) and push it to GHCR tagged `latest` and `main-<short sha>`.
+- [x] **OPS-CI-006**: When publishing, CI shall build a `linux/amd64` image (no other architectures) and push it to GHCR tagged `latest` and `main-<short sha>`.
 - [x] **OPS-CI-007**: When an image is pushed, CI shall sign its digest with keyless cosign and shall attest an SPDX SBOM and build provenance to the registry.
 - [x] **OPS-CI-008**: Every Monday and on manual dispatch, CI shall prune GHCR versions of the image, keeping `latest` and the five most recent tagged versions and deleting untagged versions.
-- [ ] **OPS-CI-009**: When a pull request is opened or updated, CI shall build the `linux/amd64` image without pushing it, so the build job fails on a Dockerfile or lockfile regression.
+- [x] **OPS-CI-009**: When a pull request is opened or updated, CI shall build the `linux/amd64` image without pushing it, so the build job fails on a Dockerfile or lockfile regression.
 
 ## Dependency Scanning and Policy
 

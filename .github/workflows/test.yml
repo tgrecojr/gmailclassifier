@@ -1,3 +1,4 @@
+# @spec OPS-CI-001, OPS-CI-002, OPS-CI-003, OPS-CI-004, OPS-CI-009
 name: Run Tests
 
 on:
@@ -63,7 +64,7 @@ jobs:
           tree = ET.parse('coverage.xml')
           root = tree.getroot()
           coverage = float(root.attrib['line-rate']) * 100
-          threshold = 75.0
+          threshold = 90.0
           print(f'Coverage: {coverage:.1f}%')
           print(f'Threshold: {threshold}%')
           if coverage < threshold:
@@ -102,3 +103,24 @@ jobs:
       - name: Check code formatting with black
         run: |
           uv run black --check --diff .
+
+  # Build the image on pull requests without pushing it, so a Dockerfile or
+  # lockfile regression fails the PR instead of the first push to main.
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

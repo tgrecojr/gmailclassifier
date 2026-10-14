@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.28@sha256:bb22d9815c728170f72750f4e5b0d672e06176142e1d602c7e66c050100b7e5b
 # Gmail Email Classifier - Dockerfile
+# @spec OPS-IMAGE-001, OPS-IMAGE-002, OPS-IMAGE-003, OPS-IMAGE-004, OPS-IMAGE-005
 
 FROM cgr.dev/chainguard/python:latest-dev@sha256:e8e6a6f7677673d91c9b28fa2ec6ad62cd5ed532179846d2c14e75c93a12c3fc AS builder
 

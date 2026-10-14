@@ -11,10 +11,10 @@ A single long-running agent that polls a Gmail inbox for unread messages, asks J
 - HTTP: httpx2 (synchronous client, `MockTransport` in tests)
 - Gmail: google-api-python-client with google-auth-oauthlib
 - Model: Jev `typesafe/jev-1.13` via `https://openrouter.ai/api/alpha/decisions`
-- Tests: pytest, pytest-cov, pytest-mock; CI coverage floor 90% (workflow still at 75% until OPS-CI-002 lands)
+- Tests: pytest, pytest-cov, pytest-mock; CI coverage floor 90% line coverage
 - Lint and format: flake8 (max line 127, max complexity 10), black
 - Container: two-stage Chainguard Python build, distroless runtime, nonroot
-- CI/CD: GitHub Actions (tests on PR; scan, build, sign, attest, publish to GHCR on push to main); Renovate automerges non-majors
+- CI/CD: GitHub Actions (tests, lint, and a no-push amd64 image build on PR; scan, build, sign, attest, publish to GHCR on push to main); Renovate automerges non-majors
 
 ## Commands
 
