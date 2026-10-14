@@ -50,13 +50,12 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 
 ## Key Findings
 
-1. **README overstates what Jev does not see** — README says "Jev never sees label *names*, only the descriptions". `jev_classifier.py:80` puts the label name inside each Noul's instructions ("Does this email belong under the label 'Finance'?") and `:86` uses label names as the Choice criteria keys. Descriptions are the criteria, but names are in the request.
-2. **Every failure collapses to "no labels"** — `classify_email` (`jev_classifier.py:235-246`) catches `JevRequestError` and returns `[]`. The caller cannot tell a transport outage from a confident "nothing fits", and the agent-runtime segment marks the email processed either way. Accepted under the HLD tenet *classify once over classify eventually*.
-3. **Retry policy is fixed and minimal** — `MAX_ATTEMPTS = 2`, one sleep of `retry_delay_seconds` (default 1.0), `RETRYABLE_STATUSES = {429, 500, 502, 503, 504}` (`:42-43`, `:183-205`). `Retry-After` headers are ignored; there is no backoff or jitter.
-4. **Missing API key is not detected here** — the constructor builds `Authorization: Bearer {api_key}` (`:173`) without checking for `None` or empty. A missing key surfaces as HTTP 401 on the first email.
-5. **Body cap and text reduction are duplicated with gmail-intake** — `BODY_MAX_CHARS = 5000` (`:41`) and the reduction in `build_state` (`:57-71`) repeat what the Gmail client already did. Both are idempotent. The duplication makes the classifier correct for any caller (the setup-verification probe bypasses the Gmail client), at the cost of two owners for one number.
-6. **Booleans count as probabilities** — `_probability` (`:96-97`) accepts anything `isinstance(..., (int, float))`, which includes `bool`. A `noul: true` would read as 1.0. Not observed from the live endpoint; noted as an edge.
-7. **Pure rule is cleanly separable from transport** — `build_state`, `build_questions`, `select_labels`, and `validate_labels` take and return plain dicts and lists. Tests exercise the HTTP layer through `httpx2.MockTransport` and assert the exact request body.
+1. **Every failure collapses to "no labels"** — `classify_email` (`jev_classifier.py:235-246`) catches `JevRequestError` and returns `[]`. The caller cannot tell a transport outage from a confident "nothing fits", and the agent-runtime segment marks the email processed either way. Accepted under the HLD tenet *classify once over classify eventually*.
+2. **Retry policy is fixed and minimal** — `MAX_ATTEMPTS = 2`, one sleep of `retry_delay_seconds` (default 1.0), `RETRYABLE_STATUSES = {429, 500, 502, 503, 504}` (`:42-43`, `:183-205`). `Retry-After` headers are ignored; there is no backoff or jitter.
+3. **Missing API key is not detected here** — the constructor builds `Authorization: Bearer {api_key}` (`:173`) without checking for `None` or empty. A missing key surfaces as HTTP 401 on the first email.
+4. **Body cap and text reduction are duplicated with gmail-intake** — `BODY_MAX_CHARS = 5000` (`:41`) and the reduction in `build_state` (`:57-71`) repeat what the Gmail client already did. Both are idempotent. The duplication makes the classifier correct for any caller (the setup-verification probe bypasses the Gmail client), at the cost of two owners for one number.
+5. **Booleans count as probabilities** — `_probability` (`:96-97`) accepts anything `isinstance(..., (int, float))`, which includes `bool`. A `noul: true` would read as 1.0. Not observed from the live endpoint; noted as an edge.
+6. **Pure rule is cleanly separable from transport** — `build_state`, `build_questions`, `select_labels`, and `validate_labels` take and return plain dicts and lists. Tests exercise the HTTP layer through `httpx2.MockTransport` and assert the exact request body.
 
 ## Work Required
 
@@ -64,10 +63,10 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 _None identified during mapping._
 
 ### Should Fix
-1. Align README's "never sees label names" claim with `build_questions`, or change `build_questions` to omit names (finding 1).
+_None._
 
 ### Nice to Have
-2. Validate `api_key` at construction so a missing key fails at startup rather than on the first email (finding 4).
-3. Honor `Retry-After` on 429 (finding 3).
-4. Settle one owner for the 5000-character cap with gmail-intake (finding 5; gmail-intake LLD Deferred 9).
-5. Reject or coerce boolean `noul` values explicitly (finding 6).
+1. Validate `api_key` at construction so a missing key fails at startup rather than on the first email (finding 3).
+2. Honor `Retry-After` on 429 (finding 2).
+3. Settle one owner for the 5000-character cap with gmail-intake (finding 4; gmail-intake LLD Deferred 9).
+4. Reject or coerce boolean `noul` values explicitly (finding 5).

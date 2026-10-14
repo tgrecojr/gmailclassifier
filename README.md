@@ -32,7 +32,7 @@ The system uses a JSON configuration file (`classifier_config.json`) to define l
 }
 ```
 
-Jev never sees label *names*, only the descriptions, so every label needs one. The agent refuses to start if a description is missing, empty, or if a label is called `None` (reserved for "nothing fits"). See [How labels are chosen](#how-labels-are-chosen) below.
+Jev scores each label by its *description*; the label name only appears in the question text ("Does this email belong under the label 'Finance'?"), so every label needs a description that says what belongs under it. The agent refuses to start if a description is missing, empty, or if a label is called `None` (reserved for "nothing fits"). See [How labels are chosen](#how-labels-are-chosen) below.
 
 ## Jev Configuration
 
