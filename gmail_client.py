@@ -9,7 +9,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import logging
-from mail_text import normalize_urls, strip_html
+from mail_text import strip_html
 
 logger = logging.getLogger(__name__)
 
@@ -118,49 +118,44 @@ class GmailClient:
 
         return flow.credentials
 
-    # @spec INTAKE-FETCH-001, INTAKE-FETCH-002, INTAKE-FETCH-005, INTAKE-FETCH-006
+    # @spec INTAKE-FETCH-001, INTAKE-FETCH-006
+    def list_unread_ids(self, max_results: int = 10) -> List[str]:
+        """
+        Ids of unread inbox messages, newest first, up to max_results.
+
+        A Gmail API error propagates: the caller's poll cycle should count as
+        failed rather than look like an empty inbox.
+        """
+        results = (
+            self.service.users()
+            .messages()
+            .list(userId="me", labelIds=["INBOX", "UNREAD"], maxResults=max_results)
+            .execute()
+        )
+        ids = [msg["id"] for msg in results.get("messages", [])]
+        if ids:
+            logger.info(f"Found {len(ids)} unread messages")
+        else:
+            logger.info("No unread messages found")
+        return ids
+
+    # @spec INTAKE-FETCH-007
     def get_unread_messages(self, max_results: int = 10) -> List[Dict]:
-        """
-        Get unread messages from inbox.
-
-        Args:
-            max_results: Maximum number of messages to retrieve
-
-        Returns:
-            List of message dictionaries with id, subject, from, body
-        """
-        try:
-            results = (
-                self.service.users()
-                .messages()
-                .list(userId="me", labelIds=["INBOX", "UNREAD"], maxResults=max_results)
-                .execute()
-            )
-
-            messages = results.get("messages", [])
-
-            if not messages:
-                logger.info("No unread messages found")
-                return []
-
-            logger.info(f"Found {len(messages)} unread messages")
-
-            # Get full message details
-            detailed_messages = []
-            for msg in messages:
-                detailed_msg = self._get_message_details(msg["id"])
-                if detailed_msg:
-                    detailed_messages.append(detailed_msg)
-
-            return detailed_messages
-
-        except HttpError as error:
-            logger.error(f"An error occurred: {error}")
-            return []
+        """List unread ids and fetch each; messages whose fetch failed are omitted."""
+        messages = []
+        for msg_id in self.list_unread_ids(max_results):
+            message = self.get_message(msg_id)
+            if message:
+                messages.append(message)
+        return messages
 
     # @spec INTAKE-FETCH-002, INTAKE-FETCH-003, INTAKE-FETCH-004, INTAKE-FETCH-005
-    def _get_message_details(self, msg_id: str) -> Optional[Dict]:
-        """Get detailed information about a specific message."""
+    def get_message(self, msg_id: str) -> Optional[Dict]:
+        """
+        Fetch one message in full and return its record, or None on a Gmail
+        API error. The body is extracted text only: URL reduction and the
+        length cap are the classifier's job (jev_classifier.build_state).
+        """
         try:
             message = (
                 self.service.users()
@@ -168,62 +163,62 @@ class GmailClient:
                 .get(userId="me", id=msg_id, format="full")
                 .execute()
             )
-
-            headers = message["payload"].get("headers", [])
-            subject = next(
-                (h["value"] for h in headers if h["name"].lower() == "subject"),
-                "No Subject",
-            )
-            from_email = next(
-                (h["value"] for h in headers if h["name"].lower() == "from"), "Unknown"
-            )
-            date = next(
-                (h["value"] for h in headers if h["name"].lower() == "date"), "Unknown"
-            )
-
-            # Get message body. Strip tracking-link paths *before* truncating so
-            # they don't eat the body budget in link-heavy marketing emails.
-            body = normalize_urls(self._get_message_body(message["payload"]))
-
-            return {
-                "id": msg_id,
-                "subject": subject,
-                "from": from_email,
-                "date": date,
-                "body": body[:5000],  # Limit body to 5000 chars to avoid token limits
-                "snippet": message.get("snippet", ""),
-            }
-
         except HttpError as error:
             logger.error(f"Error getting message details for {msg_id}: {error}")
             return None
+
+        headers = message["payload"].get("headers", [])
+
+        def header(name: str, default: str) -> str:
+            return next(
+                (h["value"] for h in headers if h["name"].lower() == name), default
+            )
+
+        return {
+            "id": msg_id,
+            "subject": header("subject", "No Subject"),
+            "from": header("from", "Unknown"),
+            "date": header("date", "Unknown"),
+            "body": self._get_message_body(message["payload"]),
+            "snippet": message.get("snippet", ""),
+        }
+
+    @staticmethod
+    def _walk_parts(payload: Dict):
+        """Depth-first over a payload's parts, descending into nested multiparts."""
+        for part in payload.get("parts", []):
+            yield part
+            yield from GmailClient._walk_parts(part)
 
     # @spec INTAKE-BODY-001, INTAKE-BODY-002, INTAKE-BODY-003, INTAKE-BODY-004
     def _get_message_body(self, payload: Dict) -> str:
         """
         Extract message body from payload.
 
-        text/plain is preferred. When only text/html is available it is reduced
-        to its visible text here, before the caller's length cap, so the cap
-        is spent on words rather than markup.
+        text/plain is preferred at any depth (attachments wrap the text in a
+        nested multipart/alternative). When only text/html is available it is
+        reduced to its visible text, since the markup is MIME detail rather
+        than message content.
         """
-        body = ""
-
         if "parts" in payload:
-            for part in payload["parts"]:
-                if part["mimeType"] == "text/plain":
-                    if "data" in part["body"]:
-                        body = _decode(part["body"]["data"])
-                        break
-                elif part["mimeType"] == "text/html" and not body:
-                    if "data" in part["body"]:
-                        body = strip_html(_decode(part["body"]["data"]))
-        elif "body" in payload and "data" in payload["body"]:
+            html = ""
+            for part in self._walk_parts(payload):
+                data = part.get("body", {}).get("data")
+                if not data:
+                    continue
+                if part.get("mimeType") == "text/plain":
+                    return _decode(data)
+                if part.get("mimeType") == "text/html" and not html:
+                    html = strip_html(_decode(data))
+            return html
+
+        if "body" in payload and "data" in payload["body"]:
             body = _decode(payload["body"]["data"])
             if payload.get("mimeType") == "text/html":
                 body = strip_html(body)
+            return body
 
-        return body
+        return ""
 
     # @spec ACTIONS-LABEL-001, ACTIONS-LABEL-002, ACTIONS-LABEL-003
     def create_label_if_not_exists(self, label_name: str) -> str:
@@ -241,8 +236,9 @@ class GmailClient:
             results = self.service.users().labels().list(userId="me").execute()
             labels = results.get("labels", [])
 
+            wanted = label_name.casefold()
             for label in labels:
-                if label["name"] == label_name:
+                if label["name"].casefold() == wanted:
                     logger.debug(
                         f"Label '{label_name}' already exists with ID: {label['id']}"
                     )

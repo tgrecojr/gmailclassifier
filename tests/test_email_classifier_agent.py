@@ -75,6 +75,9 @@ def mock_gmail_client():
             side_effect=lambda label: f"label_id_{label}"
         )
         client.add_labels_to_message = Mock()
+        # ids-first fetch: the loop lists ids, then fetches each new one
+        client.list_unread_ids = Mock(return_value=[])
+        client.get_message = Mock(side_effect=lambda msg_id: _email(msg_id))
         mock.return_value = client
         yield client
 
@@ -464,7 +467,7 @@ class TestRunContinuous:
     ):
         mock_config.POLL_INTERVAL_SECONDS = 0
         mock_config.MAX_EMAILS_PER_POLL = 10
-        mock_gmail_client.get_unread_messages.return_value = [_email("a"), _email("b")]
+        mock_gmail_client.list_unread_ids.return_value = ["a", "b"]
         agent = EmailClassifierAgent()
         agent.processed_emails["stale"] = (
             datetime.now(UTC) - timedelta(days=40)
@@ -475,7 +478,26 @@ class TestRunContinuous:
 
         # the stale entry was pruned at the top of the cycle, then a and b were added
         assert set(agent.processed_emails) == {"a", "b"}
-        mock_gmail_client.get_unread_messages.assert_called_once_with(max_results=10)
+        mock_gmail_client.list_unread_ids.assert_called_once_with(max_results=10)
+        assert mock_gmail_client.get_message.call_count == 2
+
+    # @spec AGENT-LOOP-001
+    def test_already_processed_ids_are_not_fetched(
+        self, mock_config, mock_gmail_client, mock_classifier, caplog
+    ):
+        caplog.set_level(logging.INFO)
+        mock_config.POLL_INTERVAL_SECONDS = 0
+        mock_config.MAX_EMAILS_PER_POLL = 10
+        mock_gmail_client.list_unread_ids.return_value = ["old", "new"]
+        agent = EmailClassifierAgent()
+        agent.processed_emails["old"] = datetime.now(UTC).isoformat()
+
+        with patch("email_classifier_agent.time.sleep", side_effect=KeyboardInterrupt):
+            agent.run_continuous()
+
+        mock_gmail_client.get_message.assert_called_once_with("new")
+        assert mock_classifier.classify_email.call_count == 1
+        assert "1 already processed" in caplog.text
 
     # @spec AGENT-LOOP-001
     def test_poll_summary_counts_handled_and_failed(
@@ -484,7 +506,12 @@ class TestRunContinuous:
         caplog.set_level(logging.INFO)
         mock_config.POLL_INTERVAL_SECONDS = 0
         mock_config.MAX_EMAILS_PER_POLL = 10
-        mock_gmail_client.get_unread_messages.return_value = [
+        mock_gmail_client.list_unread_ids.return_value = [
+            "labeled",
+            "unlabeled",
+            "broken",
+        ]
+        mock_gmail_client.get_message.side_effect = [
             _email("labeled"),
             _email("unlabeled"),
             {"subject": "no id"},
@@ -497,6 +524,21 @@ class TestRunContinuous:
 
         assert "Handled 2 of 3 emails (1 failed)" in caplog.text
 
+    # @spec AGENT-LOOP-001
+    def test_message_whose_fetch_fails_is_left_for_the_next_poll(
+        self, mock_config, mock_gmail_client, mock_classifier
+    ):
+        mock_config.POLL_INTERVAL_SECONDS = 0
+        mock_config.MAX_EMAILS_PER_POLL = 10
+        mock_gmail_client.list_unread_ids.return_value = ["gone", "ok"]
+        mock_gmail_client.get_message.side_effect = [None, _email("ok")]
+        agent = EmailClassifierAgent()
+
+        with patch("email_classifier_agent.time.sleep", side_effect=KeyboardInterrupt):
+            agent.run_continuous()
+
+        assert set(agent.processed_emails) == {"ok"}
+
     # @spec AGENT-LOOP-005, AGENT-LOOP-004
     def test_sigterm_handler_is_installed_and_stops_the_loop(
         self, mock_config, mock_gmail_client, mock_classifier, caplog
@@ -504,7 +546,6 @@ class TestRunContinuous:
         caplog.set_level(logging.INFO)
         mock_config.POLL_INTERVAL_SECONDS = 0
         mock_config.MAX_EMAILS_PER_POLL = 10
-        mock_gmail_client.get_unread_messages.return_value = []
         agent = EmailClassifierAgent()
         installed = {}
 
@@ -532,7 +573,7 @@ class TestRunContinuous:
         caplog.set_level(logging.INFO)
         mock_config.POLL_INTERVAL_SECONDS = 60
         mock_config.MAX_EMAILS_PER_POLL = 10
-        mock_gmail_client.get_unread_messages.side_effect = RuntimeError("down")
+        mock_gmail_client.list_unread_ids.side_effect = RuntimeError("down")
         agent = EmailClassifierAgent()
 
         with patch("email_classifier_agent.time.sleep", side_effect=KeyboardInterrupt):
@@ -541,19 +582,35 @@ class TestRunContinuous:
         assert "Email Classifier Agent stopped" in caplog.text
 
     # @spec AGENT-LOOP-002
-    def test_empty_inbox_sleeps_without_classifying(
+    def test_empty_inbox_sleeps_without_fetching_or_classifying(
         self, mock_config, mock_gmail_client, mock_classifier
     ):
         mock_config.POLL_INTERVAL_SECONDS = 0
         mock_config.MAX_EMAILS_PER_POLL = 10
-        mock_gmail_client.get_unread_messages.return_value = []
+        mock_gmail_client.list_unread_ids.return_value = []
         agent = EmailClassifierAgent()
 
         with patch("email_classifier_agent.time.sleep", side_effect=KeyboardInterrupt):
             agent.run_continuous()
 
+        mock_gmail_client.get_message.assert_not_called()
         mock_classifier.classify_email.assert_not_called()
         assert agent.processed_emails == {}
+
+    # @spec AGENT-LOOP-002
+    def test_all_listed_ids_already_processed_fetches_nothing(
+        self, mock_config, mock_gmail_client, mock_classifier
+    ):
+        mock_config.POLL_INTERVAL_SECONDS = 0
+        mock_config.MAX_EMAILS_PER_POLL = 10
+        mock_gmail_client.list_unread_ids.return_value = ["seen"]
+        agent = EmailClassifierAgent()
+        agent.processed_emails["seen"] = datetime.now(UTC).isoformat()
+
+        with patch("email_classifier_agent.time.sleep", side_effect=KeyboardInterrupt):
+            agent.run_continuous()
+
+        mock_gmail_client.get_message.assert_not_called()
 
     # @spec AGENT-LOOP-003
     def test_loop_survives_gmail_errors(
@@ -561,9 +618,9 @@ class TestRunContinuous:
     ):
         mock_config.POLL_INTERVAL_SECONDS = 0
         mock_config.MAX_EMAILS_PER_POLL = 10
-        mock_gmail_client.get_unread_messages.side_effect = [
+        mock_gmail_client.list_unread_ids.side_effect = [
             RuntimeError("gmail down"),
-            [_email("a")],
+            ["a"],
         ]
         agent = EmailClassifierAgent()
 
@@ -574,7 +631,7 @@ class TestRunContinuous:
             agent.run_continuous()
 
         assert set(agent.processed_emails) == {"a"}
-        assert mock_gmail_client.get_unread_messages.call_count == 2
+        assert mock_gmail_client.list_unread_ids.call_count == 2
 
     # @spec AGENT-LOOP-003
     def test_failed_cycles_back_off_exponentially_and_reset_on_success(
@@ -583,13 +640,13 @@ class TestRunContinuous:
         mock_config.POLL_INTERVAL_SECONDS = 60
         mock_config.MAX_EMAILS_PER_POLL = 10
         down = RuntimeError("gmail down")
-        mock_gmail_client.get_unread_messages.side_effect = [
+        mock_gmail_client.list_unread_ids.side_effect = [
             down,
             down,
             down,
             down,
             down,  # five consecutive failures
-            [_email("a")],  # success resets the backoff
+            ["a"],  # success resets the backoff
             down,  # a fresh failure starts over at one interval
             KeyboardInterrupt,  # end the loop from inside the poll body
         ]

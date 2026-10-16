@@ -88,8 +88,8 @@ flowchart LR
 One poll cycle, as agent-runtime sequences it:
 
 1. Prune the ledger by retention.
-2. gmail-intake lists up to `MAX_EMAILS_PER_POLL` messages labeled `INBOX` and `UNREAD`, fetches each in full, and reduces the body.
-3. For each record not in the ledger, jev-decision builds the state and questions, posts once with one retry, and applies the threshold rule.
+2. gmail-intake lists up to `MAX_EMAILS_PER_POLL` message ids labeled `INBOX` and `UNREAD`; the agent drops ids already in the ledger and fetches only the rest in full.
+3. For each fetched record, jev-decision builds the state and questions (reducing URLs and capping the body), posts once with one retry, and applies the threshold rule.
 4. Labels found: gmail-actions adds them and removes the message from the inbox in one call (archiving is configurable). None found: the message stays in the inbox, optionally under a review label.
 5. The id is written to the ledger. The loop sleeps one interval.
 
@@ -107,7 +107,7 @@ Segment design docs live under `docs/intent/<segment>/`; status and findings per
 
 **A local ledger rather than Gmail read state.** Marking mail read would hide it from the operator; labeling alone cannot express "already considered". A JSON file of ids with timestamps is inspectable, mounts as a volume, and expires entries so it cannot grow forever. Detail: `docs/intent/processed-state/`.
 
-**Reduce text at both ends.** The Gmail client reduces before its length cap so link-heavy mail keeps its words; the classifier reduces again so it is correct for any caller. The duplication is accepted; the 5000-character cap predates Jev and is under review. Detail: `docs/intent/gmail-intake/`, `docs/intent/jev-decision/`.
+**Reduce text once, in the decision stage.** The Gmail client extracts text from MIME (descending into nested parts, reducing HTML to visible text) and nothing more. The classifier's `build_state` cuts URLs to their host and caps the body at 5000 characters for every caller, because those rules exist for Jev's accuracy and privacy. One owner, no duplicate constants. Detail: `docs/intent/jev-decision/`.
 
 **Mark processed on every outcome.** Labeled, sent to review, no label, or a swallowed failure all end with the id in the ledger; only an unexpected exception leaves an email for the next poll. This is the simplest rule that guarantees no double classification. Its cost, that a transient outage skips mail for the retention window, is accepted under the tenet *classify once over classify eventually*. Detail: `docs/intent/agent-runtime/`.
 

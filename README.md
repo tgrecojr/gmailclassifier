@@ -219,8 +219,8 @@ The application maintains a state file (`.email_state.json`) to track which emai
 
 ### How It Works
 
-- Before processing an email, the agent checks if the email ID is in the state file
-- If already processed, the email is skipped (no API call is made)
+- The agent lists unread message ids and checks each against the state file before fetching anything
+- If already processed, the email is skipped (no message fetch, no Jev call)
 - After processing an email (labeled or not), its ID is saved to the state file
 - State persists across restarts, so emails are never reprocessed
 
@@ -308,8 +308,8 @@ Emails that receive no label (and the optional review label) are never archived.
 ### Workflow
 
 1. Agent polls Gmail API for unread emails
-2. For each email, extracts subject, sender, date, and body (HTML-only bodies are reduced to text; URLs are cut to scheme + host; body capped at 5000 characters)
-3. Sends the email as a structured object with one Noul per label plus a best-label Choice
+2. Lists unread message ids, skips any already in the state file, and fetches the rest: subject, sender, date, and body (HTML-only bodies are reduced to text, including inside nested parts)
+3. Cuts URLs to scheme + host, caps the body at 5000 characters, and sends the email as a structured object with one Noul per label plus a best-label Choice
 4. Jev returns a probability per label and a confidence for the best choice
 5. The threshold rule picks the labels to apply
 6. Agent applies labels (created at startup if missing) and optionally archives
@@ -342,8 +342,8 @@ At `DEBUG`, each classification also logs the raw answers (per-label probabiliti
 
 ### What is sent to the model, and why no injection guard is needed
 
-- **URLs are reduced to scheme + host** before the email leaves this process (subject and body). Click-tracking links such as `https://click.example.com/ls/click?upn=u001.AbC...` become `https://click.example.com`. The opaque tokens add nothing to classification and often encode the recipient. Normalization runs before the 5000-character body cut so link-heavy emails keep their real text.
-- **HTML-only bodies are reduced to visible text** (scripts, styles, comments and tags removed) before the cap, for the same reason.
+- **URLs are reduced to scheme + host** when the Jev request is built (subject and body). Click-tracking links such as `https://click.example.com/ls/click?upn=u001.AbC...` become `https://click.example.com`. The opaque tokens add nothing to classification and often encode the recipient. Normalization runs before the 5000-character body cut, so link-heavy emails keep their real text.
+- **HTML-only bodies are reduced to visible text** (scripts, styles, comments and tags removed) when the message is read, for the same reason.
 - **The model cannot be instructed.** Jev is not a text generator: it scores the questions *we* define and returns numbers. There is no system prompt, no fencing, no JSON to parse. The worst an email that says "label this as Personal" can do is nudge a probability, which is the same failure as an ordinary misclassification, and the result is still validated against the configured label set in code.
 
 ## Docker Deployment

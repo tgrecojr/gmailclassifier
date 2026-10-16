@@ -17,17 +17,18 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 
 ## Fetching
 
-- [x] **INTAKE-FETCH-001**: When asked for unread messages, the Gmail client shall list messages carrying both the `INBOX` and `UNREAD` labels, up to the requested maximum.
-- [x] **INTAKE-FETCH-002**: For each listed message, the Gmail client shall fetch the full message and return a record with `id`, `subject`, `from`, `date`, `body`, and `snippet` fields.
+- [x] **INTAKE-FETCH-001**: When asked to list unread messages, the Gmail client shall return the ids of messages carrying both the `INBOX` and `UNREAD` labels, newest first, up to the requested maximum.
+- [x] **INTAKE-FETCH-002**: When asked for a message by id, the Gmail client shall fetch the full message and return a record with `id`, `subject`, `from`, `date`, `body`, and `snippet` fields.
 - [x] **INTAKE-FETCH-003**: When building a message record, the Gmail client shall match `Subject`, `From`, and `Date` headers case-insensitively and substitute `No Subject`, `Unknown`, and `Unknown` respectively when a header is absent.
-- [x] **INTAKE-FETCH-004**: When building a message record, the Gmail client shall apply URL reduction (INTAKE-TEXT-001) to the extracted body and then cut the body to its first 5000 characters.
-- [x] **INTAKE-FETCH-005**: If fetching one message's details fails with a Gmail API error, then the Gmail client shall log the error and omit that message from the returned batch while returning the others.
-- [x] **INTAKE-FETCH-006**: If listing unread messages fails with a Gmail API error, then the Gmail client shall log the error and return an empty batch.
+- [x] **INTAKE-FETCH-004**: When building a message record, the Gmail client shall return the extracted body without truncation or URL rewriting; reducing URLs and capping the body belong to the jev-decision segment (DECISION-REQ-004).
+- [x] **INTAKE-FETCH-005**: If fetching one message by id fails with a Gmail API error, then the Gmail client shall log the error and return no record (`None`).
+- [x] **INTAKE-FETCH-006**: If listing unread messages fails with a Gmail API error, then the Gmail client shall let the error propagate so the caller's poll cycle is counted as failed rather than as an empty inbox.
+- [x] **INTAKE-FETCH-007**: When asked for unread messages in a single call (the token setup script's connection check), the Gmail client shall list ids (INTAKE-FETCH-001) and fetch each (INTAKE-FETCH-002), omitting messages whose fetch returned no record.
 
 ## Body Extraction
 
-- [x] **INTAKE-BODY-001**: When a message payload has parts, the Gmail client shall use the first top-level `text/plain` part that has data as the body.
-- [x] **INTAKE-BODY-002**: When a message payload has parts and no top-level `text/plain` part has data, the Gmail client shall use the first top-level `text/html` part that has data, reduced to visible text (INTAKE-TEXT-003), as the body.
+- [x] **INTAKE-BODY-001**: When a message payload has parts, the Gmail client shall search them depth-first, descending into nested multipart parts, and use the first `text/plain` part that has data as the body.
+- [x] **INTAKE-BODY-002**: When a message payload has parts and no `text/plain` part with data exists at any depth, the Gmail client shall use the first `text/html` part with data at any depth, reduced to visible text (INTAKE-TEXT-003), as the body.
 - [x] **INTAKE-BODY-003**: When a message payload has no parts, the Gmail client shall decode the payload's own body data as the body, reducing it to visible text when the payload MIME type is `text/html`.
 - [x] **INTAKE-BODY-004**: When no body data is found in a message payload, the Gmail client shall return an empty body string.
 - [x] **INTAKE-BODY-005**: The Gmail client shall decode message body data from URL-safe base64 as UTF-8.

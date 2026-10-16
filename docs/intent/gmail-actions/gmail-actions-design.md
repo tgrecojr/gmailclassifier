@@ -21,11 +21,11 @@ The segment shares `GmailClient` and its authenticated service with the gmail-in
 `create_label_if_not_exists(label_name) -> label_id | None`:
 
 1. List all labels for the account.
-2. If a label's `name` equals `label_name` exactly, return its `id`.
+2. If a label's `name` equals `label_name` case-insensitively (`casefold`), return its `id`.
 3. Otherwise create a label with `labelListVisibility: labelShow` and `messageListVisibility: show` and return the new `id`.
 4. On `HttpError` from either call, log and return `None`.
 
-Matching is exact and case-sensitive. Gmail itself treats label names as case-insensitively unique, so a case mismatch between the configured name and an existing Gmail label falls through to a create attempt that Gmail rejects, and the method returns `None`. This is inferred from Gmail's documented behavior rather than observed.
+Matching is case-insensitive because Gmail treats label names as case-insensitively unique: a configured `finance` finds an existing `Finance` instead of attempting a create that Gmail would reject.
 
 The agent-runtime segment calls this once per configured label at startup, plus once for the optional review label, and keeps the returned ids in a name-to-id map for the life of the process.
 
@@ -52,7 +52,7 @@ Nothing on the agent's path removes `UNREAD`. Labeled mail stays unread so the o
 | Archive mechanism | Fold `removeLabelIds: ["INBOX"]` into the label-adding `modify` call when asked | A separate `archive_message` call after labeling | One round trip and one atomic change; the message is never half-updated. |
 | Read state | Leave `UNREAD` untouched | Mark read after labeling | The operator should still see classified mail as new; the processed ledger, not read state, prevents reprocessing (README "State Persistence"). |
 | Failure surface | Catch `HttpError`, log, return `None` or nothing | Raise to the caller; return a success flag | Keeps the poll loop alive without try/except in the agent. The cost, that the agent marks a message processed after a failed write, is accepted under the HLD tenet *classify once over classify eventually*. |
-| Name matching | Exact, case-sensitive | Case-insensitive match (Gmail's own uniqueness rule) | Casing was never considered; equality was the obvious first implementation. Whether to match case-insensitively is Deferred 1. |
+| Name matching | Case-insensitive (`casefold`) | Exact, case-sensitive | Gmail's own uniqueness rule is case-insensitive; matching the same way means a casing difference in the config never produces a failed create and a dropped label. |
 | Message-mutation surface | One method, `add_labels_to_message` | Also `mark_as_read` and `archive_message` as standalone calls | Archiving happens inside the label write and the agent never marks mail read, so standalone methods had no caller; dead surface invites a caller that would contradict the read-state decision above. |
 
 ## Open Questions & Future Decisions
@@ -60,11 +60,12 @@ Nothing on the agent's path removes `UNREAD`. Labeled mail stays unread so the o
 ### Resolved
 1. ✅ Nested labels (`Parent/Child`) are not supported and never were intended. Configured label names are flat; `create_label_if_not_exists` creates no parents. A configured name containing `/` is not rejected today and would fail at creation if its parent did not exist.
 2. ✅ `mark_as_read` and `archive_message` were removed along with their tests. Nothing called them and the design never marks mail read.
-3. ✅ A failed label write is logged and swallowed; the agent-runtime segment marks the email processed regardless, per the HLD tenet *classify once over classify eventually*. Reporting failure to the caller would only matter if that tenet were reversed.
+3. ✅ Label names match case-insensitively, as Gmail itself treats them.
+4. ✅ A label deleted in Gmail mid-run makes later writes with its id fail until the agent restarts; accepted, restart is the fix at this scale.
+5. ✅ A failed label write is logged and swallowed; the agent-runtime segment marks the email processed regardless, per the HLD tenet *classify once over classify eventually*. Reporting failure to the caller would only matter if that tenet were reversed.
 
 ### Deferred
-1. Verify Gmail's case handling for label names and either match case-insensitively or document that configured names must match Gmail's casing exactly.
-2. The label id map is built once at startup. A label deleted in Gmail mid-run makes every later `modify` with its id fail and be swallowed. The map is owned by agent-runtime; noted here because the failure surfaces in this segment.
+_None._
 
 ## References
 

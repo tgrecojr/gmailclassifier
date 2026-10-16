@@ -18,6 +18,13 @@ def _make_http_error(status: int = 500, reason: str = "error") -> HttpError:
     return HttpError(resp=resp, content=b"")
 
 
+def _get_call(client):
+    """The mocked messages().get().execute for a test client."""
+    return (
+        client.service.users.return_value.messages.return_value.get.return_value.execute
+    )
+
+
 def _b64(text: str) -> str:
     return base64.urlsafe_b64encode(text.encode("utf-8")).decode("utf-8")
 
@@ -152,50 +159,50 @@ class TestAuthenticate:
 
 
 @pytest.mark.unit
-class TestGetUnreadMessages:
-    # @spec INTAKE-FETCH-001, INTAKE-FETCH-002
-    def test_returns_detailed_messages(self, client):
+class TestListUnreadIds:
+    # @spec INTAKE-FETCH-001
+    def test_returns_ids_newest_first_up_to_max(self, client):
         client.service.users.return_value.messages.return_value.list.return_value.execute.return_value = {
             "messages": [{"id": "m1"}, {"id": "m2"}]
         }
-        with patch.object(
-            GmailClient,
-            "_get_message_details",
-            side_effect=[{"id": "m1"}, {"id": "m2"}],
-        ):
-            result = client.get_unread_messages(max_results=5)
-
-        assert [m["id"] for m in result] == ["m1", "m2"]
+        assert client.list_unread_ids(max_results=5) == ["m1", "m2"]
+        _, kwargs = (
+            client.service.users.return_value.messages.return_value.list.call_args
+        )
+        assert kwargs["labelIds"] == ["INBOX", "UNREAD"]
+        assert kwargs["maxResults"] == 5
 
     # @spec INTAKE-FETCH-001
     def test_returns_empty_list_when_no_messages(self, client):
         client.service.users.return_value.messages.return_value.list.return_value.execute.return_value = (
             {}
         )
-        assert client.get_unread_messages() == []
-
-    # @spec INTAKE-FETCH-005
-    def test_skips_messages_whose_details_fail(self, client):
-        client.service.users.return_value.messages.return_value.list.return_value.execute.return_value = {
-            "messages": [{"id": "m1"}, {"id": "m2"}]
-        }
-        with patch.object(
-            GmailClient, "_get_message_details", side_effect=[{"id": "m1"}, None]
-        ):
-            result = client.get_unread_messages()
-
-        assert [m["id"] for m in result] == ["m1"]
+        assert client.list_unread_ids() == []
 
     # @spec INTAKE-FETCH-006
-    def test_http_error_returns_empty_list(self, client):
+    def test_http_error_propagates(self, client):
         client.service.users.return_value.messages.return_value.list.return_value.execute.side_effect = (
             _make_http_error()
         )
-        assert client.get_unread_messages() == []
+        with pytest.raises(HttpError):
+            client.list_unread_ids()
 
 
 @pytest.mark.unit
-class TestGetMessageDetails:
+class TestGetUnreadMessages:
+    # @spec INTAKE-FETCH-007
+    def test_lists_then_fetches_each_and_skips_failures(self, client):
+        with (
+            patch.object(GmailClient, "list_unread_ids", return_value=["m1", "m2"]),
+            patch.object(GmailClient, "get_message", side_effect=[{"id": "m1"}, None]),
+        ):
+            result = client.get_unread_messages(max_results=2)
+
+        assert [m["id"] for m in result] == ["m1"]
+
+
+@pytest.mark.unit
+class TestGetMessage:
     def _payload_with_headers(self, headers, body_text="hello"):
         return {
             "payload": {
@@ -214,11 +221,9 @@ class TestGetMessageDetails:
                 {"name": "Date", "value": "2026-04-24"},
             ]
         )
-        client.service.users.return_value.messages.return_value.get.return_value.execute.return_value = (
-            message
-        )
+        _get_call(client).return_value = message
 
-        result = client._get_message_details("m1")
+        result = client.get_message("m1")
 
         assert result["id"] == "m1"
         assert result["subject"] == "Hi"
@@ -226,13 +231,15 @@ class TestGetMessageDetails:
         assert result["date"] == "2026-04-24"
         assert result["body"] == "hello"
         assert result["snippet"] == "snip"
+        _, kwargs = (
+            client.service.users.return_value.messages.return_value.get.call_args
+        )
+        assert kwargs["format"] == "full"
 
     # @spec INTAKE-FETCH-003
     def test_fills_defaults_when_headers_missing(self, client):
-        client.service.users.return_value.messages.return_value.get.return_value.execute.return_value = self._payload_with_headers(
-            []
-        )
-        result = client._get_message_details("m1")
+        _get_call(client).return_value = self._payload_with_headers([])
+        result = client.get_message("m1")
 
         assert result["subject"] == "No Subject"
         assert result["from"] == "Unknown"
@@ -240,40 +247,25 @@ class TestGetMessageDetails:
 
     # @spec INTAKE-FETCH-003
     def test_header_matching_is_case_insensitive(self, client):
-        client.service.users.return_value.messages.return_value.get.return_value.execute.return_value = self._payload_with_headers(
+        _get_call(client).return_value = self._payload_with_headers(
             [{"name": "subject", "value": "Lower"}]
         )
-        assert client._get_message_details("m1")["subject"] == "Lower"
+        assert client.get_message("m1")["subject"] == "Lower"
 
     # @spec INTAKE-FETCH-004
-    def test_body_truncated_to_5000_chars(self, client):
-        long_text = "x" * 6000
-        client.service.users.return_value.messages.return_value.get.return_value.execute.return_value = {
-            "payload": {"headers": [], "body": {"data": _b64(long_text)}},
-            "snippet": "",
-        }
-        assert len(client._get_message_details("m1")["body"]) == 5000
-
-    # @spec INTAKE-FETCH-004
-    def test_tracking_urls_normalized_before_truncation(self, client):
-        """Link-heavy bodies keep their real text: URLs shrink before the 5000 cut."""
-        tracking = "https://click.example.com/ls/click?upn=" + "A" * 5500
-        body_text = f"Visit {tracking} for the footer text"
-        client.service.users.return_value.messages.return_value.get.return_value.execute.return_value = {
+    def test_body_is_returned_untruncated_and_unrewritten(self, client):
+        """Reduction and capping are the classifier's job, not the Gmail client's."""
+        body_text = "Visit https://click.example.com/ls/click?upn=" + "A" * 6000
+        _get_call(client).return_value = {
             "payload": {"headers": [], "body": {"data": _b64(body_text)}},
             "snippet": "",
         }
-
-        body = client._get_message_details("m1")["body"]
-
-        assert body == "Visit https://click.example.com for the footer text"
+        assert client.get_message("m1")["body"] == body_text
 
     # @spec INTAKE-FETCH-005
     def test_http_error_returns_none(self, client):
-        client.service.users.return_value.messages.return_value.get.return_value.execute.side_effect = (
-            _make_http_error()
-        )
-        assert client._get_message_details("m1") is None
+        _get_call(client).side_effect = _make_http_error()
+        assert client.get_message("m1") is None
 
 
 @pytest.mark.unit
@@ -319,6 +311,69 @@ class TestGetMessageBody:
         payload = {"parts": [{"mimeType": "text/plain", "body": {}}]}
         assert client._get_message_body(payload) == ""
 
+    # @spec INTAKE-BODY-001
+    def test_descends_into_nested_multipart_for_text_plain(self, client):
+        payload = {
+            "mimeType": "multipart/mixed",
+            "parts": [
+                {
+                    "mimeType": "multipart/alternative",
+                    "body": {},
+                    "parts": [
+                        {
+                            "mimeType": "text/plain",
+                            "body": {"data": _b64("nested plain")},
+                        },
+                        {
+                            "mimeType": "text/html",
+                            "body": {"data": _b64("<p>nested html</p>")},
+                        },
+                    ],
+                },
+                {"mimeType": "application/pdf", "body": {"attachmentId": "x"}},
+            ],
+        }
+        assert client._get_message_body(payload) == "nested plain"
+
+    # @spec INTAKE-BODY-002
+    def test_descends_into_nested_multipart_for_html_when_no_plain(self, client):
+        payload = {
+            "mimeType": "multipart/mixed",
+            "parts": [
+                {
+                    "mimeType": "multipart/related",
+                    "body": {},
+                    "parts": [
+                        {
+                            "mimeType": "text/html",
+                            "body": {"data": _b64("<div>Deep &amp; html</div>")},
+                        },
+                        {"mimeType": "image/png", "body": {"attachmentId": "y"}},
+                    ],
+                }
+            ],
+        }
+        assert client._get_message_body(payload) == "Deep & html"
+
+    # @spec INTAKE-BODY-001
+    def test_prefers_any_text_plain_over_shallower_html(self, client):
+        payload = {
+            "parts": [
+                {
+                    "mimeType": "text/html",
+                    "body": {"data": _b64("<p>shallow html</p>")},
+                },
+                {
+                    "mimeType": "multipart/alternative",
+                    "body": {},
+                    "parts": [
+                        {"mimeType": "text/plain", "body": {"data": _b64("deep plain")}}
+                    ],
+                },
+            ]
+        }
+        assert client._get_message_body(payload) == "deep plain"
+
 
 @pytest.mark.unit
 class TestCreateLabelIfNotExists:
@@ -329,6 +384,14 @@ class TestCreateLabelIfNotExists:
         }
         assert client.create_label_if_not_exists("Billing") == "L1"
         # Should not attempt to create when already present
+        client.service.users.return_value.labels.return_value.create.assert_not_called()
+
+    # @spec ACTIONS-LABEL-001
+    def test_matches_existing_label_case_insensitively(self, client):
+        client.service.users.return_value.labels.return_value.list.return_value.execute.return_value = {
+            "labels": [{"id": "L1", "name": "Finance"}]
+        }
+        assert client.create_label_if_not_exists("finance") == "L1"
         client.service.users.return_value.labels.return_value.create.assert_not_called()
 
     # @spec ACTIONS-LABEL-002

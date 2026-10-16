@@ -104,15 +104,15 @@ The boolean return means *handled*: `True` whenever the email ends up in the led
 `run_continuous()` repeats until interrupted:
 
 1. Prune the in-memory ledger (processed-state).
-2. Fetch up to `MAX_EMAILS_PER_POLL` unread inbox messages (gmail-intake).
-3. If none, log at DEBUG. Otherwise call `process_email` on each and log "Handled N of M emails (K failed)".
+2. List up to `MAX_EMAILS_PER_POLL` unread inbox message ids (gmail-intake) and drop the ones already in the ledger, logging how many were skipped.
+3. If nothing is left, log at DEBUG. Otherwise fetch each remaining message in full (a fetch that returns nothing is left for the next poll), call `process_email` on each, and log "Handled N of M emails (K failed)".
 4. Sleep `POLL_INTERVAL_SECONDS`.
 
 Any exception escaping a cycle is logged at ERROR and followed by a sleep before the next cycle. The sleep backs off exponentially across consecutive failed cycles: the poll interval, doubled per further failure, capped at ten times the interval (`MAX_BACKOFF_MULTIPLIER`), and reset to the plain interval after a cycle completes. One cycle (prune, fetch, process, log) is `_poll_once`; `run_continuous` owns the sleep and failure count.
 
 On entry, `run_continuous` installs a SIGTERM handler that raises `KeyboardInterrupt`, so `docker stop` and Ctrl-C end the loop the same way. The interrupt is caught by a handler around the whole loop, so it ends the loop cleanly whether it arrives during a cycle or during either sleep, and the agent logs that it stopped.
 
-The ledger is consulted inside `process_email`, after gmail-intake has already fetched the full message. Messages that remain unread in the inbox after processing are re-downloaded on every poll in which they appear in the list window.
+The ledger is consulted between listing and fetching, so a message that stays unread in the inbox after processing costs one id in a list response per poll and is never downloaded again. `process_email` checks the ledger a second time as a guard.
 
 ## Entry Point
 
@@ -151,10 +151,11 @@ The ledger is consulted inside `process_email`, after gmail-intake has already f
 2. ✅ A blank `OPENROUTER_API_KEY` fails at import with a printed hint, and the classifier is constructed before the Gmail client, so no configuration error ever reaches an OAuth prompt.
 3. ✅ `process_email` returns "handled"; the poll summary reports handled and failed counts.
 4. ✅ SIGTERM ends the loop like Ctrl-C, and an interrupt during any sleep ends it cleanly with the "stopped" log.
-5. ✅ Integer settings are ranged and named in their errors; boolean settings accept the common spellings and reject anything else at import.
+5. ✅ Ids are listed first and filtered against the ledger before any full fetch; already-processed unread mail is no longer re-downloaded each poll.
+6. ✅ Integer settings are ranged and named in their errors; boolean settings accept the common spellings and reject anything else at import.
 
 ### Deferred
-1. Check the ledger before downloading full message bodies. Requires gmail-intake to expose listed ids before fetching details (cascades into gmail-intake).
+_None._
 
 ## References
 

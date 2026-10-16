@@ -35,7 +35,7 @@ Load settings, wire the Gmail client and Jev classifier, poll on an interval, an
 1. `config.py` — reads the environment file and `classifier_config.json` at import, validates shapes, ranges, and boolean spellings, and exposes module-level constants. A bad config stops the process before anything else runs.
 2. `EmailClassifierAgent.__init__` — constructs the Jev classifier (configuration-only, fails fast), then the Gmail client (which authenticates), ensures Gmail labels exist, and loads the ledger.
 3. `process_email` — the per-email policy: skip if in ledger; classify; dry-run short-circuit; unlabeled path; label and archive; mark processed.
-4. `run_continuous` / `_poll_once` — the poll loop: prune ledger, fetch, process, sleep; survives any exception by sleeping with exponential backoff and retrying; SIGTERM and Ctrl-C end it cleanly.
+4. `run_continuous` / `_poll_once` — the poll loop: prune ledger, list ids, skip known ones, fetch the rest, process, sleep; survives any exception by sleeping with exponential backoff and retrying; SIGTERM and Ctrl-C end it cleanly.
 5. `main.py` — CLI flag for log level, stdout logging, startup banner, exit codes.
 
 ## Spec Coverage
@@ -53,7 +53,7 @@ Load settings, wire the Gmail client and Jev classifier, poll on an interval, an
 ## Key Findings
 
 1. **"Processed" means "never send to Jev again", regardless of outcome** — `process_email` marks an email processed after a successful label write (`email_classifier_agent.py:200`), after a review-label write or no-label result (`:225`), after a label write whose ids all failed to resolve, and in dry run (`:170`). Because jev-decision swallows endpoint failures into "no labels" and gmail-actions swallows write failures, a transient outage in either results in the email being marked processed and never retried. The only path that leaves an email for the next poll is an unexpected exception (`:203`). Accepted under the HLD tenet *classify once over classify eventually*; the matching questions in jev-decision, gmail-actions, and processed-state are resolved the same way.
-2. **The ledger is checked after the full message is fetched** — gmail-intake downloads every listed message in `format="full"` before `process_email` consults the ledger (`:155`). Mail that stays unread in the inbox after processing (unlabeled mail, or everything when `REMOVE_FROM_INBOX=false`) is re-downloaded every poll until it is read or expires from the list window.
+2. **The ledger is checked between listing and fetching** — `_poll_once` (`email_classifier_agent.py:249`) drops ids already processed before any `get_message` call, so unread-but-processed mail costs one id per poll and is never re-downloaded.
 3. **Config is evaluated at import** — `config.py:107-31` loads and validates the label file when the module is imported, printing and re-raising on failure. Tests need `conftest.py` to point `CLASSIFIER_CONFIG_PATH` at a temp file and set a dummy API key before collection.
 
 ## Work Required
@@ -65,4 +65,4 @@ _None identified during mapping._
 _None._
 
 ### Nice to Have
-1. Check the ledger before fetching full message bodies, which needs gmail-intake to expose ids before details (finding 2; cascades into gmail-intake).
+_None._
