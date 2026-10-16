@@ -68,6 +68,37 @@ def _float_env(name: str, default: float, low: float, high: float) -> float:
     return value
 
 
+# @spec AGENT-CFG-014
+def _int_env(name: str, default: int, low: int, high: int) -> int:
+    raw = os.getenv(name, str(default))
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be a whole number, got {raw!r}") from None
+    if not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, got {value}")
+    return value
+
+
+_TRUE = {"true", "1", "yes", "on"}
+_FALSE = {"false", "0", "no", "off"}
+
+
+# @spec AGENT-CFG-013
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    value = raw.strip().lower()
+    if value in _TRUE:
+        return True
+    if value in _FALSE:
+        return False
+    raise ValueError(
+        f"{name} must be one of true/false, 1/0, yes/no, on/off; got {raw!r}"
+    )
+
+
 # Classifier Configuration
 # @spec AGENT-CFG-002, AGENT-CFG-008
 CLASSIFIER_CONFIG_PATH = os.getenv("CLASSIFIER_CONFIG_PATH", "classifier_config.json")
@@ -110,16 +141,18 @@ JEV_REVIEW_LABEL = os.getenv("JEV_REVIEW_LABEL", "").strip()
 GMAIL_CREDENTIALS_PATH = os.getenv("GMAIL_CREDENTIALS_PATH", "credentials.json")
 GMAIL_TOKEN_PATH = os.getenv("GMAIL_TOKEN_PATH", "token.json")
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
-GMAIL_HEADLESS_MODE = os.getenv("GMAIL_HEADLESS_MODE", "false").lower() == "true"
-REMOVE_FROM_INBOX = os.getenv("REMOVE_FROM_INBOX", "true").lower() == "true"
+GMAIL_HEADLESS_MODE = _bool_env("GMAIL_HEADLESS_MODE", False)
+REMOVE_FROM_INBOX = _bool_env("REMOVE_FROM_INBOX", True)
 
 # Application Configuration
 # @spec AGENT-CFG-013, AGENT-CFG-014
-POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "60"))
-MAX_EMAILS_PER_POLL = int(os.getenv("MAX_EMAILS_PER_POLL", "10"))
+POLL_INTERVAL_SECONDS = _int_env("POLL_INTERVAL_SECONDS", 60, 1, 86400)
+MAX_EMAILS_PER_POLL = _int_env("MAX_EMAILS_PER_POLL", 10, 1, 500)  # Gmail list max
 STATE_FILE = os.getenv("STATE_FILE", ".email_state.json")
-STATE_RETENTION_DAYS = int(os.getenv("STATE_RETENTION_DAYS", "30"))
+STATE_RETENTION_DAYS = _int_env(
+    "STATE_RETENTION_DAYS", 30, 0, 3650
+)  # 0 disables pruning
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 # DRY_RUN=true classifies and logs the labels it would apply, but never
 # creates labels, modifies messages, or writes the state file.
-DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
+DRY_RUN = _bool_env("DRY_RUN", False)

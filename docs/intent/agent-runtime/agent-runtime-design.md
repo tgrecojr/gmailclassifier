@@ -50,16 +50,16 @@ On any of these errors the module prints the error and a one-line hint, then re-
 | `GMAIL_CREDENTIALS_PATH` | `credentials.json` | string |
 | `GMAIL_TOKEN_PATH` | `token.json` | string |
 | `GMAIL_SCOPES` | `gmail.modify` only | fixed, not configurable |
-| `GMAIL_HEADLESS_MODE` | false | true only when the value is `true`, case-insensitive |
+| `GMAIL_HEADLESS_MODE` | false | boolean: `true`/`1`/`yes`/`on` or `false`/`0`/`no`/`off`, case-insensitive; anything else fails at import |
 | `REMOVE_FROM_INBOX` | true | same boolean rule |
 | `DRY_RUN` | false | same boolean rule |
-| `POLL_INTERVAL_SECONDS` | 60 | `int()`, unguarded |
-| `MAX_EMAILS_PER_POLL` | 10 | `int()`, unguarded |
+| `POLL_INTERVAL_SECONDS` | 60 | integer, must be in [1, 86400] |
+| `MAX_EMAILS_PER_POLL` | 10 | integer, must be in [1, 500] (Gmail's list maximum) |
 | `STATE_FILE` | `.email_state.json` | string |
-| `STATE_RETENTION_DAYS` | 30 | `int()`, unguarded; zero or less disables pruning |
+| `STATE_RETENTION_DAYS` | 30 | integer, must be in [0, 3650]; zero disables pruning |
 | `LOG_LEVEL` | `INFO` | string; CLI flag overrides |
 
-An out-of-range float raises `ValueError("<NAME> must be between <low> and <high>, got <value>")` at import.
+An out-of-range or non-numeric value raises a `ValueError` naming the variable and the allowed range at import; an unrecognized boolean spelling does the same, listing the accepted spellings.
 
 ## Startup
 
@@ -81,8 +81,8 @@ An out-of-range float raises `ValueError("<NAME> must be between <low> and <high
 no id                      → log error, return False
 id in ledger               → log skip, return True
 classify → predicted labels
-dry run                    → log "would apply", mark processed (memory only), return bool(predicted)
-no labels                  → unlabeled path, return False
+dry run                    → log "would apply", mark processed (memory only), return True
+no labels                  → unlabeled path (mark processed), return True
 labels → ids via the startup map (names with no id are dropped)
   some ids                 → add labels, archive iff REMOVE_FROM_INBOX
   no ids                   → warn, apply nothing
@@ -97,7 +97,7 @@ Two consequences follow from this shape:
 - **An outage looks like "nothing fits".** jev-decision returns an empty list on any endpoint failure and gmail-actions returns nothing on a failed write. Both land on a "mark processed" line. An email caught in a transient failure is therefore never retried within its retention window. The README documents the Jev half of this ("a second failure yields no labels and the email is marked processed").
 - **Only bugs get retried.** The exception path is the one route that leaves an email unmarked for the next poll. By design every expected failure is caught below this layer, so in practice it is reached only by programming errors.
 
-The boolean return feeds the poll summary. It is `True` for "labeled" and "already processed" and for "predicted labels had no ids", and `False` for "unlabeled but handled", so the "Processed N out of M" line counts labeled mail rather than handled mail.
+The boolean return means *handled*: `True` whenever the email ends up in the ledger (labeled, sent to review, left unlabeled, already processed, or dry run), `False` only when it could not be handled and will be seen again (no id, or an unexpected exception). The poll summary reports handled and failed counts from it.
 
 ## Poll Loop
 
@@ -105,10 +105,12 @@ The boolean return feeds the poll summary. It is `True` for "labeled" and "alrea
 
 1. Prune the in-memory ledger (processed-state).
 2. Fetch up to `MAX_EMAILS_PER_POLL` unread inbox messages (gmail-intake).
-3. If none, log at DEBUG. Otherwise call `process_email` on each and log how many returned `True` out of how many were fetched.
+3. If none, log at DEBUG. Otherwise call `process_email` on each and log "Handled N of M emails (K failed)".
 4. Sleep `POLL_INTERVAL_SECONDS`.
 
-Any exception escaping a cycle is logged at ERROR and followed by a sleep before the next cycle. The sleep backs off exponentially across consecutive failed cycles: the poll interval, doubled per further failure, capped at ten times the interval (`MAX_BACKOFF_MULTIPLIER`), and reset to the plain interval after a cycle completes. One cycle (prune, fetch, process, log) is `_poll_once`; `run_continuous` owns the sleep and failure count. `KeyboardInterrupt` breaks the loop and logs that the agent stopped. No other signal is handled; SIGTERM terminates the process immediately.
+Any exception escaping a cycle is logged at ERROR and followed by a sleep before the next cycle. The sleep backs off exponentially across consecutive failed cycles: the poll interval, doubled per further failure, capped at ten times the interval (`MAX_BACKOFF_MULTIPLIER`), and reset to the plain interval after a cycle completes. One cycle (prune, fetch, process, log) is `_poll_once`; `run_continuous` owns the sleep and failure count.
+
+On entry, `run_continuous` installs a SIGTERM handler that raises `KeyboardInterrupt`, so `docker stop` and Ctrl-C end the loop the same way. The interrupt is caught by a handler around the whole loop, so it ends the loop cleanly whether it arrives during a cycle or during either sleep, and the agent logs that it stopped.
 
 The ledger is consulted inside `process_email`, after gmail-intake has already fetched the full message. Messages that remain unread in the inbox after processing are re-downloaded on every poll in which they appear in the list window.
 
@@ -119,7 +121,7 @@ The ledger is consulted inside `process_email`, after gmail-intake has already f
 - Parses `--log-level` (`DEBUG`, `INFO`, `WARNING`, `ERROR`), defaulting to `LOG_LEVEL`.
 - Configures root logging to stdout as `time - logger - level - message`.
 - Logs a banner: decisions URL, model, both thresholds, label names, poll interval, and a dry-run notice when on.
-- Constructs the agent and runs the loop. `KeyboardInterrupt` exits 0; any other exception is logged with traceback and exits 1.
+- Constructs the agent and runs the loop. `KeyboardInterrupt` (also raised for SIGTERM by the loop's handler) exits 0; any other exception is logged with traceback and exits 1.
 
 ## Decisions & Alternatives
 
@@ -138,20 +140,21 @@ The ledger is consulted inside `process_email`, after gmail-intake has already f
 | Error backoff in the loop | Exponential backoff on consecutive failed cycles: the sleep doubles from the poll interval up to ten times the interval, and resets after a successful cycle | Sleep the normal interval every time (today's code); immediate retry | A failing dependency (Gmail or OpenRouter down) should be hit less often the longer it stays down, not every interval. Ten times the interval caps the wait at ten minutes with the default 60-second poll. |
 | Logging destination | stdout, configurable level, CLI flag over environment | File logging; structured JSON | Logs are written to the console so containers and systemd capture them natively (README "Logging"). |
 | Concurrency | One synchronous loop, one instance | Threads per message; multiple replicas | Multiple instances would race on the same unread mail and the ledger; raise `MAX_EMAILS_PER_POLL` instead (DEPLOYMENT "Scaling Considerations"). |
-| Boolean parsing | Only the literal `true` (any case) is true | Accept `1`, `yes`, `on`; strict `true`/`false` with error | Not a deliberate choice; the first implementation stuck. The cost is that `yes` or `1` is silently false. Whether to widen or to reject unknown values is Deferred 5. |
+| Boolean parsing | `true`/`1`/`yes`/`on` and `false`/`0`/`no`/`off`, case-insensitive; anything else fails at import | Only the literal `true`; accept anything non-empty as true | The common spellings all work, and a typo such as `DRY_RUN=maybe` stops the agent with a message instead of silently running live. |
+| Integer settings | Parsed with the same ranged, named error as the floats; ranges 1 to 86400 s, 1 to 500 per poll, 0 to 3650 days | Bare `int()` | A non-numeric or absurd value should fail at import with the variable name, not with a bare traceback or a loop that never sleeps. 500 is Gmail's list maximum; 0 days keeps the documented "never prune" meaning. |
+| Shutdown signals | SIGTERM is translated to `KeyboardInterrupt`; one handler around the loop | Ignore SIGTERM (process dies wherever it is); a stop flag polled between sleeps | `docker stop` sends SIGTERM; translating it reuses the Ctrl-C path, and wrapping the whole loop means an interrupt during the failure-path sleep also ends cleanly. The state file is written atomically, so even an untranslated kill cannot corrupt it. |
 
 ## Open Questions & Future Decisions
 
 ### Resolved
 1. ✅ **Mark-processed policy on failure.** An email whose Jev call or label write failed is marked processed, left in the inbox (under the review label when configured), and not retried within the retention window. Settled by the HLD tenet *classify once over classify eventually*: no email is ever sent to Jev twice, at the accepted cost that a transient outage skips mail. Reversing this would require jev-decision to distinguish failure from "no labels", gmail-actions to report write failures, and possibly processed-state to record an outcome per entry.
 2. ✅ A blank `OPENROUTER_API_KEY` fails at import with a printed hint, and the classifier is constructed before the Gmail client, so no configuration error ever reaches an OAuth prompt.
+3. ✅ `process_email` returns "handled"; the poll summary reports handled and failed counts.
+4. ✅ SIGTERM ends the loop like Ctrl-C, and an interrupt during any sleep ends it cleanly with the "stopped" log.
+5. ✅ Integer settings are ranged and named in their errors; boolean settings accept the common spellings and reject anything else at import.
 
 ### Deferred
-1. Should `process_email` return "handled" consistently, or should the loop report counts by outcome (labeled, review, skipped, failed)?
-2. Handle SIGTERM so `docker stop` ends the loop gracefully instead of killing the process mid-write. Related: a keyboard interrupt that arrives during the failure-path sleep escapes `run_continuous` (the handler is outside its own `except`), so `main` ends the process without the loop's own "stopped" log; exit status is still 0.
-3. Check the ledger before downloading full message bodies. Requires gmail-intake to expose listed ids before fetching details (cascades into gmail-intake).
-4. Wrap the integer settings with the same ranged error message the float settings get.
-5. Boolean settings accept only the literal `true`. Widen to `1`/`yes`/`on`, or reject any other value loudly?
+1. Check the ledger before downloading full message bodies. Requires gmail-intake to expose listed ids before fetching details (cascades into gmail-intake).
 
 ## References
 

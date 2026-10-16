@@ -49,19 +49,28 @@ def load_state(path: str) -> Dict[str, str]:
     return processed_raw if isinstance(processed_raw, dict) else {}
 
 
-# @spec STATE-FILE-001, STATE-FILE-005, STATE-FILE-006, STATE-FILE-007
+# @spec STATE-FILE-001, STATE-FILE-005, STATE-FILE-006, STATE-FILE-007, STATE-FILE-009
 def save_state(path: str, processed_emails: Dict[str, str]) -> None:
-    """Write the state file, creating its directory if needed. Errors are logged."""
+    """
+    Write the state file atomically (temp file beside it, then replace),
+    creating its directory if needed. Errors are logged.
+    """
+    tmp_path = f"{path}.tmp"
     try:
         state_dir = os.path.dirname(path)
         if state_dir and not os.path.exists(state_dir):
             os.makedirs(state_dir, exist_ok=True)
 
-        with open(path, "w") as f:
+        with open(tmp_path, "w") as f:
             json.dump({"processed_emails": processed_emails}, f, indent=2)
+        os.replace(tmp_path, path)
         logger.debug(f"State saved to {path}")
     except Exception as e:
         logger.error(f"Error saving state file {path}: {e}")
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
 
 
 # @spec STATE-RET-001
