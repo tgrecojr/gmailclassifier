@@ -46,8 +46,8 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 
 ## Poll Loop
 
-- [x] **AGENT-LOOP-001**: On each poll cycle, the agent shall prune the ledger, fetch up to `MAX_EMAILS_PER_POLL` unread inbox messages, process each in order, log how many were handled and how many failed out of how many were fetched, and sleep `POLL_INTERVAL_SECONDS`.
-- [x] **AGENT-LOOP-002**: When a poll cycle fetches no unread messages, the agent shall log at DEBUG and sleep the poll interval.
+- [x] **AGENT-LOOP-001**: On each poll cycle, the agent shall prune the ledger, list up to `MAX_EMAILS_PER_POLL` unread message ids, skip ids already in the ledger (logging how many were skipped), fetch each remaining message in full, process each in order, log how many were handled and how many failed out of how many were fetched, and sleep `POLL_INTERVAL_SECONDS`.
+- [x] **AGENT-LOOP-002**: When a poll cycle lists no unread messages, or every listed id is already in the ledger, the agent shall log at DEBUG and sleep the poll interval without fetching any message.
 - [x] **AGENT-LOOP-003**: If an exception escapes a poll cycle, then the agent shall log it and sleep before the next cycle, with the sleep doubling on each consecutive failed cycle from `POLL_INTERVAL_SECONDS` up to ten times `POLL_INTERVAL_SECONDS`, and resetting to `POLL_INTERVAL_SECONDS` after a cycle completes without an exception.
 - [x] **AGENT-LOOP-004**: When the poll loop receives a keyboard interrupt or SIGTERM, whether during a cycle or during either sleep, the agent shall stop polling and log that it has stopped.
 - [x] **AGENT-LOOP-005**: When the poll loop starts, the agent shall install a SIGTERM handler that ends the loop the same way as a keyboard interrupt, so a container stop is graceful.

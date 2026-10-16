@@ -6,8 +6,8 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 
 ## Ensuring Labels
 
-- [x] **ACTIONS-LABEL-001**: When asked to ensure a Gmail label exists, the Gmail client shall list the account's labels and return the id of the label whose name exactly matches the requested name.
-- [x] **ACTIONS-LABEL-002**: When asked to ensure a Gmail label exists and no label name matches exactly, the Gmail client shall create a label with that name, `labelListVisibility` of `labelShow`, and `messageListVisibility` of `show`, and return the new label's id.
+- [x] **ACTIONS-LABEL-001**: When asked to ensure a Gmail label exists, the Gmail client shall list the account's labels and return the id of the label whose name matches the requested name case-insensitively.
+- [x] **ACTIONS-LABEL-002**: When asked to ensure a Gmail label exists and no label name matches case-insensitively, the Gmail client shall create a label with the requested name, `labelListVisibility` of `labelShow`, and `messageListVisibility` of `show`, and return the new label's id.
 - [x] **ACTIONS-LABEL-003**: If listing or creating a Gmail label fails with a Gmail API error, then the Gmail client shall log the error and return no id (`None`) without raising.
 
 ## Modifying Messages

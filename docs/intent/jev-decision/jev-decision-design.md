@@ -55,7 +55,7 @@ There is no `messages` field; this is not a chat completion.
 | `date` | `email["date"]`, default `"Unknown"` | none |
 | `body` | `email["body"]`, else `email["snippet"]`, else `""` | HTML reduced to text if it looks like HTML; URLs cut to host; first 5000 characters |
 
-The reduction repeats what the gmail-intake segment already did to the body. It is idempotent and makes `build_state` correct for any caller, including the setup-verification probe, which never touches the Gmail client.
+This is the only place URLs are reduced and the body is capped. The Gmail client hands over extracted text (HTML already reduced to visible text as part of MIME handling); `build_state` applies the rules that exist for Jev's accuracy, and does so for every caller, including the setup-verification probe, which never touches the Gmail client.
 
 ### Questions
 
@@ -127,7 +127,7 @@ It runs in the `JevClassifier` constructor and is also called by `config.py` whe
 | State format | Named fields `from`, `subject`, `date`, `body` | One concatenated text blob; fenced text with a preamble | TypeSafe's guidance is to use an object for most requests so each part of the state has a descriptive name. Jev is not instructed, so the fencing and "email is data" preamble the chat classifier needed have no role here. |
 | Label name inside the Noul instructions | Included: "Does this email belong under the label '<name>'?" | Instructions that reference only the description | The name gives the model a short handle alongside the description, and the question reads naturally in DEBUG logs. The constraint that matters is that question *ids* carry no meaning for the model, so all meaning must sit in instructions and criteria; the descriptions remain the criteria. The README says the same. |
 | Attribution headers | `HTTP-Referer` set to the repository URL, `X-Title` set to `gmailclassifier` | Omit | OpenRouter's app-attribution convention; shows the app by name in the OpenRouter activity dashboard. |
-| Reduction in `build_state` | Reduce HTML and URLs and cap the body in the classifier, even though the Gmail client already did | Trust the caller; reduce only in the Gmail client | TypeSafe's notes for Jev 1.13 state that accuracy falls as the state grows with unrelated content, so the Jev migration plan placed HTML stripping and URL reduction at the request-building step, where every caller passes. The Gmail client gained the same HTML stripping in the same change so its 5000-character cap is spent on words, which is where the duplication comes from. The plan judged the inherited 5000-character cap (about 1300 tokens against a 32k-token window) as fine rather than necessary; it predates Jev (Deferred 1). |
+| Reduction in `build_state` | Reduce HTML (if any slipped through), cut URLs to host, cap the body at 5000 characters, here and only here | Reduce in the Gmail client as well; no cap | TypeSafe's notes for Jev 1.13 state that accuracy falls as the state grows with unrelated content, so the request-building step applies the reduction for every caller. The 5000 figure was inherited from the chat-LLM era (about 1300 tokens against a 32k-token window) and kept as a sane payload bound. |
 
 ## Open Questions & Future Decisions
 
@@ -137,10 +137,11 @@ It runs in the `JevClassifier` constructor and is also called by `config.py` whe
 3. ✅ A numeric `Retry-After` header sets the single retry's delay, capped at 60 seconds; backoff across repeated failures belongs to the poll loop.
 4. ✅ Booleans are not probabilities; `_probability` treats them as absent.
 5. ✅ Thresholds are tuned from DEBUG logs of real mail; the hand-labeled sweep is not going to be run. The approach remains in the migration plan in git history if that ever changes.
-6. ✅ A transport or endpoint failure returns `[]` from `classify_email`, the same as "no label fits". The agent-runtime segment marks the email processed either way, per the HLD tenet *classify once over classify eventually*. Distinguishing the two would only matter if that tenet were reversed.
+6. ✅ This segment is the sole owner of URL reduction and the 5000-character body cap; the Gmail client stopped applying them. The cap is kept: TypeSafe documents that accuracy falls as the state grows with unrelated content.
+7. ✅ A transport or endpoint failure returns `[]` from `classify_email`, the same as "no label fits". The agent-runtime segment marks the email processed either way, per the HLD tenet *classify once over classify eventually*. Distinguishing the two would only matter if that tenet were reversed.
 
 ### Deferred
-1. Who owns the 5000-character body cap and text reduction: this segment, gmail-intake, or both? The number predates Jev and was sized for a chat LLM's token budget (gmail-intake LLD Deferred 4).
+_None._
 
 ## References
 

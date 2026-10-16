@@ -6,7 +6,6 @@ Generate Gmail OAuth token for use in headless environments.
 Run this on a machine with a browser, then copy token.json to your server/container.
 """
 
-import os
 import sys
 from pathlib import Path
 from gmail_client import GmailClient
@@ -62,7 +61,7 @@ def main():
         print()
         print("Testing Gmail API connection...")
         messages = client.get_unread_messages(max_results=1)
-        print(f"✓ Successfully connected to Gmail!")
+        print("✓ Successfully connected to Gmail!")
         print(f"✓ Found {len(messages)} unread message(s)")
         print()
 

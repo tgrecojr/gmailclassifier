@@ -28,7 +28,7 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 **Purpose:** Be the only place that knows the shape of a Jev decisions request and the rule that turns its answers into labels. Callers hand in an email record and get back a list of configured label names, or an empty list.
 
 **Key Components:**
-1. `build_state` — the email as a named-field object (`from`, `subject`, `date`, `body`) with HTML reduced, URLs cut to host, body capped at 5000 characters.
+1. `build_state` — the email as a named-field object (`from`, `subject`, `date`, `body`) with HTML reduced, URLs cut to host, body capped at 5000 characters; the only place those rules live.
 2. `build_questions` / `question_key` — one Noul (yes/no probability) per label plus one Choice across all labels and a `None` option.
 3. `validate_labels` — fail-fast checks on the label set; also called by `config.py` at startup.
 4. `select_labels` — the pure decision rule: every Noul at or above the label threshold, else the Choice if confident and not `None`.
@@ -50,7 +50,7 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 
 1. **Every failure collapses to "no labels"** — `classify_email` (`jev_classifier.py:274-285`) catches `JevRequestError` and returns `[]`. The caller cannot tell a transport outage from a confident "nothing fits", and the agent-runtime segment marks the email processed either way. Accepted under the HLD tenet *classify once over classify eventually*.
 2. **Retry is single-shot** — `MAX_ATTEMPTS = 2` (`:38`); the one retry waits a numeric `Retry-After` capped at `MAX_RETRY_AFTER_SECONDS` (60) or the fixed delay (`:210-216`). Backoff across repeated failures is the poll loop's job.
-3. **Body cap and text reduction are duplicated with gmail-intake** — `BODY_MAX_CHARS = 5000` (`:36`) and the reduction in `build_state` (`:55-69`) repeat what the Gmail client already did. Both are idempotent. The duplication makes the classifier correct for any caller (the setup-verification probe bypasses the Gmail client), at the cost of two owners for one number.
+3. **Sole owner of URL reduction and the body cap** — `BODY_MAX_CHARS = 5000` (`jev_classifier.py:36`) and `build_state` (`:55-69`) apply the reduction for every caller; the Gmail client hands over extracted text only.
 4. **Pure rule is cleanly separable from transport** — `build_state`, `build_questions`, `select_labels`, and `validate_labels` take and return plain dicts and lists. Tests exercise the HTTP layer through `httpx2.MockTransport` and assert the exact request body.
 
 ## Work Required
@@ -62,4 +62,4 @@ _None identified during mapping._
 _None._
 
 ### Nice to Have
-1. Settle one owner for the 5000-character cap with gmail-intake (finding 3; gmail-intake LLD Deferred 4).
+_None._

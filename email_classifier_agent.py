@@ -235,7 +235,7 @@ class EmailClassifierAgent:
         multiplier = min(2 ** (consecutive_failures - 1), MAX_BACKOFF_MULTIPLIER)
         return interval * multiplier
 
-    # @spec STATE-RET-005
+    # @spec STATE-RET-005, AGENT-LOOP-001, AGENT-LOOP-002
     def _poll_once(self) -> None:
         """One poll cycle: prune state, fetch unread mail, process each email."""
         logger.info("=== Checking for new emails ===")
@@ -243,13 +243,20 @@ class EmailClassifierAgent:
         # Cleanup old state entries periodically
         self.processed_emails = self._cleanup_old_state(self.processed_emails)
 
-        emails = self.gmail_client.get_unread_messages(
-            max_results=config.MAX_EMAILS_PER_POLL
-        )
-        if not emails:
+        # List ids first and skip ones already in the ledger, so mail that stays
+        # unread in the inbox is not re-downloaded in full on every poll.
+        ids = self.gmail_client.list_unread_ids(max_results=config.MAX_EMAILS_PER_POLL)
+        new_ids = [i for i in ids if i not in self.processed_emails]
+        if len(new_ids) < len(ids):
+            logger.info(
+                f"Skipping {len(ids) - len(new_ids)} already processed email(s)"
+            )
+        if not new_ids:
             logger.debug("No unread emails to process")
             return
 
+        emails = [self.gmail_client.get_message(i) for i in new_ids]
+        emails = [e for e in emails if e]  # a failed fetch is retried next poll
         handled = sum(1 for email in emails if self.process_email(email))
         failed = len(emails) - handled
         logger.info(
