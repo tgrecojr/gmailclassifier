@@ -50,7 +50,7 @@ The agent's `_load_state` calls `load_state` and then applies retention pruning 
 
 `_mark_processed(email_id)` records `datetime.now(UTC).isoformat()` under the id and saves immediately. There is one write per processed email, so a crash loses at most the email in flight.
 
-`save_state(path, processed)` creates the parent directory if needed and writes `{"processed_emails": processed}` as indented JSON. Any exception is logged at ERROR and swallowed. The write is a plain open-and-dump; it is not atomic.
+`save_state(path, processed)` creates the parent directory if needed, writes `{"processed_emails": processed}` as indented JSON to `<path>.tmp`, and then replaces the state file with it in one `os.replace`, so a crash mid-write leaves the previous ledger intact. Any exception is logged at ERROR and swallowed, and a leftover temp file is removed.
 
 `_save_state` is a no-op while dry run is on. Dry-run entries live in memory only, so repeated polls within one dry-run process do not reclassify the same messages, and a fresh process starts clean.
 
@@ -73,7 +73,7 @@ The practical effect of expiry: a message that is still unread in the inbox afte
 | Legacy handling | Read the list form and stamp each id with the load time; ignore unknown keys; rewrite in current form on save | Refuse old files; one-off migration script | Operators should never have to touch the file by hand; a load-time migration with a fresh stamp is the least surprising choice, at the cost of resetting those entries' age (docstring, `state_store.py:10-12`). |
 | Failure behavior on load | Return empty and continue | Stop the agent; back up and continue | A bad state file must never stop the agent; reclassifying still-unread mail is a tolerable cost (docstring, `state_store.py:29-30`). |
 | Save cadence | After every processed email | Once per poll; on shutdown | Bounds loss to one email on a crash; write volume is trivial at ten emails per poll. |
-| Write atomicity | Plain open and dump | Temp file and rename | Atomicity was never considered. The consequence of a torn write is an empty ledger and reclassification of still-unread mail, not persistent corruption. Whether to switch to temp-and-rename is Deferred 1. |
+| Write atomicity | Temp file beside the state file, then `os.replace` | Plain open and dump | A torn write would reset the ledger and reclassify every still-unread message; the rename costs nothing and removes that failure. |
 | Timestamp form | Timezone-aware UTC ISO 8601 | Naive local time; epoch seconds | Unambiguous across hosts and containers; `fromisoformat` round-trips it. |
 | Retention trigger | At startup and at the top of every poll | Startup only; a timer | Old entries are removed when the agent starts and periodically during each poll cycle (README "State Retention"). |
 | Retention disable | Zero or negative days keeps everything | A separate boolean | Set `STATE_RETENTION_DAYS=0` to keep all entries forever (README). |
@@ -84,11 +84,12 @@ The practical effect of expiry: a message that is still unread in the inbox afte
 
 ### Resolved
 1. ✅ Ledger entries record only that an email was handled, not how. Under the HLD tenet *classify once over classify eventually*, every outcome ends with the id in the ledger and none is retried, so a per-entry outcome has no consumer. Recording one would only matter if that tenet were reversed.
-2. ✅ The README's retention example now describes the real effect: a message still unread after the retention window is classified again; a newly received message always has a new id.
+2. ✅ Saves are atomic: temp file then `os.replace`.
+3. ✅ One write per processed email stays; it bounds loss to one email and the volume is trivial.
+4. ✅ The README's retention example now describes the real effect: a message still unread after the retention window is classified again; a newly received message always has a new id.
 
 ### Deferred
-1. Should saves be atomic (write to a temp file, then rename) so a crash mid-write cannot reset the ledger?
-2. Is one write per email still the right cadence, or should the agent save once per poll?
+_None._
 
 ## References
 

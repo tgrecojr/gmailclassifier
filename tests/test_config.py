@@ -92,6 +92,10 @@ def reload_config(monkeypatch):
         # Keep config.load_dotenv() from re-reading a real .env during reload
         monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: False)
         for key in (
+            "POLL_INTERVAL_SECONDS",
+            "MAX_EMAILS_PER_POLL",
+            "STATE_RETENTION_DAYS",
+            "REMOVE_FROM_INBOX",
             "JEV_MODEL",
             "JEV_LABEL_THRESHOLD",
             "JEV_FALLBACK_CONFIDENCE",
@@ -167,3 +171,44 @@ class TestJevSettings:
     def test_out_of_range_values_fail_fast(self, reload_config, env):
         with pytest.raises(ValueError, match="must be between"):
             reload_config(**env)
+
+    # @spec AGENT-CFG-014
+    @pytest.mark.parametrize(
+        "env",
+        [
+            {"POLL_INTERVAL_SECONDS": "0"},
+            {"POLL_INTERVAL_SECONDS": "soon"},
+            {"MAX_EMAILS_PER_POLL": "501"},
+            {"STATE_RETENTION_DAYS": "-1"},
+        ],
+    )
+    def test_integer_settings_are_ranged_and_named(self, reload_config, env):
+        (name,) = env
+        with pytest.raises(ValueError, match=name):
+            reload_config(**env)
+
+    # @spec AGENT-CFG-014
+    def test_integer_settings_are_read(self, reload_config):
+        config = reload_config(
+            POLL_INTERVAL_SECONDS="300",
+            MAX_EMAILS_PER_POLL="25",
+            STATE_RETENTION_DAYS="0",
+        )
+        assert config.POLL_INTERVAL_SECONDS == 300
+        assert config.MAX_EMAILS_PER_POLL == 25
+        assert config.STATE_RETENTION_DAYS == 0
+
+    # @spec AGENT-CFG-013
+    @pytest.mark.parametrize("value", ["true", "TRUE", "1", "yes", "On"])
+    def test_boolean_settings_accept_common_true_spellings(self, reload_config, value):
+        assert reload_config(DRY_RUN=value).DRY_RUN is True
+
+    # @spec AGENT-CFG-013
+    @pytest.mark.parametrize("value", ["false", "0", "no", "OFF"])
+    def test_boolean_settings_accept_common_false_spellings(self, reload_config, value):
+        assert reload_config(REMOVE_FROM_INBOX=value).REMOVE_FROM_INBOX is False
+
+    # @spec AGENT-CFG-013
+    def test_boolean_settings_reject_other_values(self, reload_config):
+        with pytest.raises(ValueError, match="DRY_RUN"):
+            reload_config(DRY_RUN="maybe")

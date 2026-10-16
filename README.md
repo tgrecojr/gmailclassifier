@@ -329,7 +329,7 @@ At `DEBUG`, each classification also logs the raw answers (per-label probabiliti
 
 - Timeouts, connection errors, 429 and 5xx responses are retried once (waiting for a numeric `Retry-After` when the server sends one, up to 60 seconds); a second failure yields no labels and the email is marked processed
 - Any other 4xx means the request itself is wrong; it is logged with the response body and yields no labels
-- Graceful shutdown on keyboard interrupt (Ctrl+C)
+- Graceful shutdown on Ctrl+C and on SIGTERM (`docker stop`); the state file is written atomically either way
 - Continues operation if individual emails fail to process
 
 ## Security Considerations

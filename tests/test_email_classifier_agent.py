@@ -6,6 +6,7 @@ unlabeled handling and dry run.
 import json
 import logging
 import os
+import signal
 import tempfile
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
@@ -204,7 +205,7 @@ class TestProcessEmail:
         mock_classifier.classify_email.return_value = []
         agent = EmailClassifierAgent()
 
-        assert agent.process_email(_email("e456")) is False
+        assert agent.process_email(_email("e456")) is True  # handled, just unlabeled
 
         assert "e456" in agent.processed_emails
         mock_gmail_client.add_labels_to_message.assert_not_called()
@@ -221,7 +222,7 @@ class TestProcessEmail:
         mock_classifier.classify_email.return_value = []
         agent = EmailClassifierAgent()
 
-        assert agent.process_email(_email("e456")) is False
+        assert agent.process_email(_email("e456")) is True
 
         mock_gmail_client.add_labels_to_message.assert_called_once_with(
             "e456", ["label_id_Review"], remove_from_inbox=False
@@ -264,7 +265,7 @@ class TestDryRun:
 
         assert agent.process_email(_email("dry1")) is True
         mock_classifier.classify_email.return_value = []
-        assert agent.process_email(_email("dry2")) is False
+        assert agent.process_email(_email("dry2")) is True
 
         mock_gmail_client.create_label_if_not_exists.assert_not_called()
         mock_gmail_client.add_labels_to_message.assert_not_called()
@@ -414,6 +415,23 @@ class TestStateTracking:
         assert "naive" in caplog.text
         assert "Removed 2 email(s) older than 30 days" in caplog.text
 
+    # @spec STATE-FILE-009
+    def test_state_is_written_atomically_via_temp_file_and_replace(
+        self, mock_config, mock_gmail_client, mock_classifier
+    ):
+        agent = EmailClassifierAgent()
+        with patch("state_store.os.replace", wraps=os.replace) as replace:
+            agent.process_email(_email("e1"))
+
+        replace.assert_called_once()
+        tmp_path, final_path = replace.call_args.args
+        assert final_path == mock_config.STATE_FILE
+        assert tmp_path != final_path
+        assert os.path.dirname(tmp_path) == os.path.dirname(final_path)
+        assert not os.path.exists(tmp_path)
+        with open(final_path) as f:
+            assert "e1" in json.load(f)["processed_emails"]
+
     # @spec STATE-FILE-007
     def test_unwritable_state_file_is_logged_not_raised(
         self, mock_config, mock_gmail_client, mock_classifier, caplog
@@ -458,6 +476,69 @@ class TestRunContinuous:
         # the stale entry was pruned at the top of the cycle, then a and b were added
         assert set(agent.processed_emails) == {"a", "b"}
         mock_gmail_client.get_unread_messages.assert_called_once_with(max_results=10)
+
+    # @spec AGENT-LOOP-001
+    def test_poll_summary_counts_handled_and_failed(
+        self, mock_config, mock_gmail_client, mock_classifier, caplog
+    ):
+        caplog.set_level(logging.INFO)
+        mock_config.POLL_INTERVAL_SECONDS = 0
+        mock_config.MAX_EMAILS_PER_POLL = 10
+        mock_gmail_client.get_unread_messages.return_value = [
+            _email("labeled"),
+            _email("unlabeled"),
+            {"subject": "no id"},
+        ]
+        mock_classifier.classify_email.side_effect = [["AWS"], []]
+        agent = EmailClassifierAgent()
+
+        with patch("email_classifier_agent.time.sleep", side_effect=KeyboardInterrupt):
+            agent.run_continuous()
+
+        assert "Handled 2 of 3 emails (1 failed)" in caplog.text
+
+    # @spec AGENT-LOOP-005, AGENT-LOOP-004
+    def test_sigterm_handler_is_installed_and_stops_the_loop(
+        self, mock_config, mock_gmail_client, mock_classifier, caplog
+    ):
+        caplog.set_level(logging.INFO)
+        mock_config.POLL_INTERVAL_SECONDS = 0
+        mock_config.MAX_EMAILS_PER_POLL = 10
+        mock_gmail_client.get_unread_messages.return_value = []
+        agent = EmailClassifierAgent()
+        installed = {}
+
+        def fake_signal(signum, handler):
+            installed[signum] = handler
+
+        def sleep_then_terminate(seconds):
+            installed[signal.SIGTERM](signal.SIGTERM, None)
+
+        with (
+            patch("email_classifier_agent.signal.signal", side_effect=fake_signal),
+            patch(
+                "email_classifier_agent.time.sleep", side_effect=sleep_then_terminate
+            ),
+        ):
+            agent.run_continuous()
+
+        assert signal.SIGTERM in installed
+        assert "Email Classifier Agent stopped" in caplog.text
+
+    # @spec AGENT-LOOP-004
+    def test_interrupt_during_failure_sleep_stops_cleanly(
+        self, mock_config, mock_gmail_client, mock_classifier, caplog
+    ):
+        caplog.set_level(logging.INFO)
+        mock_config.POLL_INTERVAL_SECONDS = 60
+        mock_config.MAX_EMAILS_PER_POLL = 10
+        mock_gmail_client.get_unread_messages.side_effect = RuntimeError("down")
+        agent = EmailClassifierAgent()
+
+        with patch("email_classifier_agent.time.sleep", side_effect=KeyboardInterrupt):
+            agent.run_continuous()  # must not raise
+
+        assert "Email Classifier Agent stopped" in caplog.text
 
     # @spec AGENT-LOOP-002
     def test_empty_inbox_sleeps_without_classifying(

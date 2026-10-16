@@ -1,4 +1,5 @@
 import logging
+import signal
 import time
 from datetime import UTC, datetime
 
@@ -138,7 +139,9 @@ class EmailClassifierAgent:
             email: Email dictionary from Gmail API
 
         Returns:
-            True if successfully processed, False otherwise
+            True when the email was handled (labeled, sent to review, left
+            unlabeled, or already processed); False when it could not be
+            handled (no id, or an unexpected error) and should be retried.
         """
         try:
             email_id = email.get("id")
@@ -165,11 +168,11 @@ class EmailClassifierAgent:
                 # Remembered in memory only so the same poll results are not
                 # re-classified every cycle; nothing is written to disk.
                 self._mark_processed(email_id)
-                return bool(predicted_labels)
+                return True
 
             if not predicted_labels:
                 self._handle_unlabeled(email)
-                return False
+                return True
 
             # Get Gmail label IDs
             label_ids = [
@@ -247,39 +250,46 @@ class EmailClassifierAgent:
             logger.debug("No unread emails to process")
             return
 
-        processed_count = sum(1 for email in emails if self.process_email(email))
-        logger.info(f"=== Processed {processed_count} out of {len(emails)} emails ===")
+        handled = sum(1 for email in emails if self.process_email(email))
+        failed = len(emails) - handled
+        logger.info(
+            f"=== Handled {handled} of {len(emails)} emails ({failed} failed) ==="
+        )
 
-    # @spec AGENT-LOOP-001, AGENT-LOOP-002, AGENT-LOOP-003, AGENT-LOOP-004
+    @staticmethod
+    def _raise_interrupt(signum, frame):
+        """SIGTERM (what `docker stop` sends) ends the loop like Ctrl-C."""
+        raise KeyboardInterrupt
+
+    # @spec AGENT-LOOP-001, AGENT-LOOP-002, AGENT-LOOP-003, AGENT-LOOP-004, AGENT-LOOP-005
     def run_continuous(self):
         """
-        Run the agent continuously, polling for new emails.
+        Run the agent continuously, polling for new emails, until interrupted
+        by Ctrl-C or SIGTERM.
         """
         logger.info(
             f"Starting continuous email classifier agent (polling every {config.POLL_INTERVAL_SECONDS}s)"
         )
+        signal.signal(signal.SIGTERM, self._raise_interrupt)
         consecutive_failures = 0
 
-        while True:
-            try:
-                self._poll_once()
-
-                # Wait before next poll
-                consecutive_failures = 0
-                logger.debug(f"Sleeping for {config.POLL_INTERVAL_SECONDS} seconds...")
-                time.sleep(config.POLL_INTERVAL_SECONDS)
-
-            except KeyboardInterrupt:
-                logger.info("Received interrupt signal, shutting down gracefully...")
-                break
-            except Exception as e:
-                consecutive_failures += 1
-                delay = self._backoff_seconds(consecutive_failures)
-                logger.error(f"Error in continuous loop: {e}")
-                logger.info(
-                    f"Waiting {delay:g} seconds before retry "
-                    f"(consecutive failures: {consecutive_failures})..."
-                )
+        try:
+            while True:
+                try:
+                    self._poll_once()
+                    consecutive_failures = 0
+                    delay = config.POLL_INTERVAL_SECONDS
+                    logger.debug(f"Sleeping for {delay} seconds...")
+                except Exception as e:
+                    consecutive_failures += 1
+                    delay = self._backoff_seconds(consecutive_failures)
+                    logger.error(f"Error in continuous loop: {e}")
+                    logger.info(
+                        f"Waiting {delay:g} seconds before retry "
+                        f"(consecutive failures: {consecutive_failures})..."
+                    )
                 time.sleep(delay)
+        except KeyboardInterrupt:
+            logger.info("Received interrupt signal, shutting down gracefully...")
 
         logger.info("Email Classifier Agent stopped")

@@ -13,6 +13,7 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 - [x] **STATE-FILE-005**: When loading the state file, the state store shall ignore any top-level key other than `processed_emails` (including a legacy `pending_retries` block), and the next save shall not write such keys back.
 - [x] **STATE-FILE-006**: When saving the ledger, the state store shall create the state file's parent directory if it does not exist.
 - [x] **STATE-FILE-007**: If saving the ledger fails, then the state store shall log the error and return without raising.
+- [x] **STATE-FILE-009**: When saving the ledger, the state store shall write the JSON to a temporary file beside the state file and then atomically replace the state file with it, so a crash mid-write leaves the previous ledger intact.
 - [x] **STATE-FILE-008**: While dry run is on (the agent-runtime setting that suppresses all Gmail and disk writes), the agent shall not write the state file, keeping processed ids in memory only for the life of the process.
 
 ## Marking Processed
