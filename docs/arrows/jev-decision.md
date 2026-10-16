@@ -15,7 +15,7 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 - docs/intent/jev-decision/jev-decision-design.md
 
 ### EARS
-- docs/intent/jev-decision/jev-decision-specs.md (29 specs)
+- docs/intent/jev-decision/jev-decision-specs.md (30 specs)
 
 ### Tests
 - tests/test_jev_classifier.py (all classes)
@@ -32,7 +32,7 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 2. `build_questions` / `question_key` — one Noul (yes/no probability) per label plus one Choice across all labels and a `None` option.
 3. `validate_labels` — fail-fast checks on the label set; also called by `config.py` at startup.
 4. `select_labels` — the pure decision rule: every Noul at or above the label threshold, else the Choice if confident and not `None`.
-5. `JevClassifier` — holds an `httpx2` client with bearer auth, posts with one retry, parses `answers`, and wraps everything in `classify_email`, which never raises.
+5. `JevClassifier` — rejects an empty key, holds an `httpx2` client with bearer auth, posts with one retry (honoring a numeric `Retry-After`), parses `answers`, and wraps everything in `classify_email`, which never raises.
 
 ## Spec Coverage
 
@@ -41,19 +41,17 @@ Turn one email record into a Jev decisions request, call OpenRouter with one ret
 | REQ   | DECISION-REQ-001 to DECISION-REQ-009 | 9 | 0 | 0 |
 | SEL   | DECISION-SEL-001 to DECISION-SEL-005 | 5 | 0 | 0 |
 | HTTP  | DECISION-HTTP-001 to DECISION-HTTP-009 | 9 | 0 | 0 |
-| CFG   | DECISION-CFG-001 to DECISION-CFG-005 | 5 | 0 | 0 |
+| CFG   | DECISION-CFG-001 to DECISION-CFG-006 | 6 | 0 | 0 |
 | LOG   | DECISION-LOG-001 | 1 | 0 | 0 |
 
-**Summary:** 29 of 29 active specs implemented; 0 deferred. Every spec is cited by `@spec` annotations in code and in at least one test. Retry on HTTP 500 and 504 (DECISION-HTTP-003) is implemented but only 429, 502, and 503 are exercised by tests.
+**Summary:** 30 of 30 active specs implemented; 0 deferred. Every spec is cited by `@spec` annotations in code and in at least one test. Retry on HTTP 500 and 504 (DECISION-HTTP-003) is implemented but only 429, 502, and 503 are exercised by tests.
 
 ## Key Findings
 
-1. **Every failure collapses to "no labels"** — `classify_email` (`jev_classifier.py:244-255`) catches `JevRequestError` and returns `[]`. The caller cannot tell a transport outage from a confident "nothing fits", and the agent-runtime segment marks the email processed either way. Accepted under the HLD tenet *classify once over classify eventually*.
-2. **Retry policy is fixed and minimal** — `MAX_ATTEMPTS = 2`, one sleep of `retry_delay_seconds` (default 1.0), `RETRYABLE_STATUSES = {429, 500, 502, 503, 504}` (`:42-43`, `:190-212`). `Retry-After` headers are ignored; there is no backoff or jitter.
-3. **Missing API key is not detected here** — the constructor builds `Authorization: Bearer {api_key}` (`:179`) without checking for `None` or empty. A missing key surfaces as HTTP 401 on the first email.
-4. **Body cap and text reduction are duplicated with gmail-intake** — `BODY_MAX_CHARS = 5000` (`:41`) and the reduction in `build_state` (`:59-73`) repeat what the Gmail client already did. Both are idempotent. The duplication makes the classifier correct for any caller (the setup-verification probe bypasses the Gmail client), at the cost of two owners for one number.
-5. **Booleans count as probabilities** — `_probability` (`:99-100`) accepts anything `isinstance(..., (int, float))`, which includes `bool`. A `noul: true` would read as 1.0. Not observed from the live endpoint; noted as an edge.
-6. **Pure rule is cleanly separable from transport** — `build_state`, `build_questions`, `select_labels`, and `validate_labels` take and return plain dicts and lists. Tests exercise the HTTP layer through `httpx2.MockTransport` and assert the exact request body.
+1. **Every failure collapses to "no labels"** — `classify_email` (`jev_classifier.py:274-285`) catches `JevRequestError` and returns `[]`. The caller cannot tell a transport outage from a confident "nothing fits", and the agent-runtime segment marks the email processed either way. Accepted under the HLD tenet *classify once over classify eventually*.
+2. **Retry is single-shot** — `MAX_ATTEMPTS = 2` (`:38`); the one retry waits a numeric `Retry-After` capped at `MAX_RETRY_AFTER_SECONDS` (60) or the fixed delay (`:210-216`). Backoff across repeated failures is the poll loop's job.
+3. **Body cap and text reduction are duplicated with gmail-intake** — `BODY_MAX_CHARS = 5000` (`:36`) and the reduction in `build_state` (`:55-69`) repeat what the Gmail client already did. Both are idempotent. The duplication makes the classifier correct for any caller (the setup-verification probe bypasses the Gmail client), at the cost of two owners for one number.
+4. **Pure rule is cleanly separable from transport** — `build_state`, `build_questions`, `select_labels`, and `validate_labels` take and return plain dicts and lists. Tests exercise the HTTP layer through `httpx2.MockTransport` and assert the exact request body.
 
 ## Work Required
 
@@ -64,7 +62,4 @@ _None identified during mapping._
 _None._
 
 ### Nice to Have
-1. Validate `api_key` at construction so a missing key fails at startup rather than on the first email (finding 3).
-2. Honor `Retry-After` on 429 (finding 2).
-3. Settle one owner for the 5000-character cap with gmail-intake (finding 4; gmail-intake LLD Deferred 9).
-4. Reject or coerce boolean `noul` values explicitly (finding 5).
+1. Settle one owner for the 5000-character cap with gmail-intake (finding 3; gmail-intake LLD Deferred 4).

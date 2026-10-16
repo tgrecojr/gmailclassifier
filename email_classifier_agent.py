@@ -22,13 +22,8 @@ class EmailClassifierAgent:
         """Initialize the email classifier agent."""
         self.dry_run = config.DRY_RUN
 
-        self.gmail_client = GmailClient(
-            credentials_path=config.GMAIL_CREDENTIALS_PATH,
-            token_path=config.GMAIL_TOKEN_PATH,
-            scopes=config.GMAIL_SCOPES,
-            headless=config.GMAIL_HEADLESS_MODE,
-        )
-
+        # The classifier only validates configuration; build it first so a bad
+        # label set or key fails before Gmail starts an OAuth prompt or refresh.
         self.classifier = JevClassifier(
             api_key=config.OPENROUTER_API_KEY,
             labels=config.LABELS,
@@ -37,6 +32,13 @@ class EmailClassifierAgent:
             label_threshold=config.JEV_LABEL_THRESHOLD,
             fallback_confidence=config.JEV_FALLBACK_CONFIDENCE,
             timeout_seconds=config.JEV_TIMEOUT_SECONDS,
+        )
+
+        self.gmail_client = GmailClient(
+            credentials_path=config.GMAIL_CREDENTIALS_PATH,
+            token_path=config.GMAIL_TOKEN_PATH,
+            scopes=config.GMAIL_SCOPES,
+            headless=config.GMAIL_HEADLESS_MODE,
         )
 
         # Gmail labels are created up front (skipped in dry run: no writes)

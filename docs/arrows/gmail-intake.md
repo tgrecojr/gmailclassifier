@@ -15,7 +15,7 @@ Authenticate to Gmail, fetch unread inbox messages, and reduce each one to the t
 - docs/intent/gmail-intake/gmail-intake-design.md
 
 ### EARS
-- docs/intent/gmail-intake/gmail-intake-specs.md (24 specs)
+- docs/intent/gmail-intake/gmail-intake-specs.md (25 specs)
 
 ### Tests
 - tests/test_gmail_client.py (`TestAuthenticate`, `TestGetUnreadMessages`, `TestGetMessageDetails`, `TestGetMessageBody`)
@@ -41,12 +41,12 @@ Authenticate to Gmail, fetch unread inbox messages, and reduce each one to the t
 
 | Facet | Spec IDs | Implemented | Deferred | Gaps |
 |-------|----------|-------------|----------|------|
-| AUTH  | INTAKE-AUTH-001 to INTAKE-AUTH-007 | 7 | 0 | 0 |
+| AUTH  | INTAKE-AUTH-001 to INTAKE-AUTH-008 | 8 | 0 | 0 |
 | FETCH | INTAKE-FETCH-001 to INTAKE-FETCH-006 | 6 | 0 | 0 |
 | BODY  | INTAKE-BODY-001 to INTAKE-BODY-005 | 5 | 0 | 0 |
 | TEXT  | INTAKE-TEXT-001 to INTAKE-TEXT-006 | 6 | 0 | 0 |
 
-**Summary:** 24 of 24 active specs implemented; 0 deferred. All are cited by `@spec` annotations in code. INTAKE-AUTH-006 and INTAKE-AUTH-007 (`setup_token.py`) are verified by running the script rather than by a test, per the HLD.
+**Summary:** 25 of 25 active specs implemented; 0 deferred. All are cited by `@spec` annotations in code. INTAKE-AUTH-006 and INTAKE-AUTH-007 (`setup_token.py`) are verified by running the script rather than by a test, per the HLD.
 
 ## Key Findings
 

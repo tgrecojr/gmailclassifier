@@ -93,6 +93,18 @@ class TestEmailClassifierAgentInit:
     """Tests for classifier wiring at agent construction."""
 
     # @spec AGENT-INIT-001
+    def test_classifier_is_built_before_gmail_client(self, mock_config):
+        with (
+            patch(
+                "email_classifier_agent.JevClassifier", side_effect=ValueError("bad")
+            ),
+            patch("email_classifier_agent.GmailClient") as mock_gmail,
+        ):
+            with pytest.raises(ValueError):
+                EmailClassifierAgent()
+        mock_gmail.assert_not_called()
+
+    # @spec AGENT-INIT-001
     def test_gmail_client_receives_config_values(self, mock_config, mock_classifier):
         with patch("email_classifier_agent.GmailClient") as mock_cls:
             EmailClassifierAgent()

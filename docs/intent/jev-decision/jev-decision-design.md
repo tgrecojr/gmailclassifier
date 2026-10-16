@@ -75,7 +75,7 @@ The reduction repeats what the gmail-intake segment already did to the body. It 
 3. Otherwise read `answers["best"]`. If its `choice` is one of the configured labels and its `confidence` is numeric and at or above `fallback_confidence`, return that single label.
 4. Otherwise return an empty list.
 
-Missing answers, non-dict answers, and non-numeric probabilities are treated as absent. A `choice` of `None` fails step 3 because `None` is never a configured label; so does any name outside the configured set.
+Missing answers, non-dict answers, and probabilities that are not numbers (booleans included) are treated as absent. A `choice` of `None` fails step 3 because `None` is never a configured label; so does any name outside the configured set.
 
 Defaults are 0.7 for the label threshold and 0.5 for the fallback confidence. Both are inclusive comparisons.
 
@@ -88,11 +88,11 @@ Defaults are 0.7 for the label threshold and 0.5 for the fallback confidence. Bo
 | Outcome of an attempt | Action |
 |---|---|
 | `httpx.TransportError` (includes timeouts) | Retry once after `retry_delay_seconds`; on the second failure raise `JevRequestError("transport error: ...")` |
-| HTTP 429, 500, 502, 503, 504 | Retry once after `retry_delay_seconds`; on the second occurrence fall through to the next row |
+| HTTP 429, 500, 502, 503, 504 | Retry once after a numeric `Retry-After` header's value (capped at 60 seconds) when present, else `retry_delay_seconds`; on the second occurrence fall through to the next row |
 | Any other status ≥ 400 | Raise `JevRequestError("HTTP <status>: <first 300 chars of body>")` without retry |
 | Status < 400 | Return the response |
 
-`Retry-After` headers are not read. There is no backoff or jitter.
+There is no backoff or jitter within a single classification; the poll loop backs off across failed cycles.
 
 `decide(email)` posts the request and returns the raw `answers` dict. A body that is not JSON, or JSON without a dict `answers`, raises `JevRequestError`. At DEBUG level it logs the model the endpoint reports, input tokens, cost, and the full answers.
 
@@ -100,7 +100,7 @@ Defaults are 0.7 for the label threshold and 0.5 for the fallback confidence. Bo
 
 ## Label Validation
 
-`validate_labels(labels, descriptions)` raises `ValueError` when:
+The constructor raises `ValueError` when the API key is empty. `validate_labels(labels, descriptions)` raises `ValueError` when:
 
 - the label list is empty;
 - any label lacks a non-empty description;
@@ -117,9 +117,9 @@ It runs in the `JevClassifier` constructor and is also called by `config.py` whe
 | Request granularity | One call per email carrying every question | One call per label; batch several emails per call | All questions are evaluated together in one request, so per-email cost and latency are flat in the label count; the decisions API scores one `state` per call. |
 | Question design | One Noul per label plus one Choice with a `None` option | Nouls only; Choice only | Nouls give independent per-label probabilities for multi-label results. The Choice with `None` gives a single best answer and an explicit "nothing fits" that the Nouls alone cannot express. |
 | Selection rule | Every Noul at or above the threshold; else the Choice if confident and not `None`; else nothing | Choice only; top-k Nouls; require both signals to agree | Multi-label is the primary behavior and should not depend on the Choice. The Choice is a fallback for emails that fit one label weakly rather than several strongly. |
-| Default thresholds | 0.7 label threshold, 0.5 fallback confidence | Values chosen from a precision/recall sweep over hand-labeled mail; a single shared threshold | These are the migration plan's starting values. The plan called for choosing them from a threshold sweep over about fifty hand-labeled emails; that measurement step was skipped by decision on 2026-10-05, and the sweep scripts were later removed. Tuning is done from DEBUG logs instead (README). See Deferred 5. |
+| Default thresholds | 0.7 label threshold, 0.5 fallback confidence | Values chosen from a precision/recall sweep over hand-labeled mail; a single shared threshold | These are the migration plan's starting values. The plan called for choosing them from a threshold sweep over about fifty hand-labeled emails; that measurement step was skipped by decision on 2026-10-05, and the sweep scripts were later removed. Tuning is done from DEBUG logs instead (README). See Resolved 5. |
 | Model version | Pinned to `typesafe/jev-1.13` by default | `~typesafe/jev-latest` moving alias | Decision behavior can shift between versions; bump deliberately and watch results for a few days (README). |
-| Retry policy | One retry after a fixed delay on transport errors and on 429, 500, 502, 503, 504; no retry on other 4xx | No retry; exponential backoff; honor `Retry-After` | The OpenRouter decisions endpoint is marked alpha and one integrator reported a sizeable share of calls hanging on read timeout, so the design is a short timeout plus one retry. Other 4xx mean the request itself is wrong and repeating it cannot help (README "Error Handling"). A second failure yields no labels. |
+| Retry policy | One retry on transport errors and on 429, 500, 502, 503, 504, waiting `Retry-After` when the server sends a number (capped at 60 s) and a fixed delay otherwise; no retry on other 4xx | No retry; exponential backoff inside the classifier; ignore `Retry-After` | The OpenRouter decisions endpoint is marked alpha and one integrator reported a sizeable share of calls hanging on read timeout, so the design is a short timeout plus one retry. Other 4xx mean the request itself is wrong and repeating it cannot help (README "Error Handling"). A second failure yields no labels. |
 | Failure surface | `classify_email` returns `[]` on any failure after logging; `decide` raises | Let `classify_email` raise; return a sentinel distinct from "no labels" | Keeps the poll loop simple: the agent treats every empty result the same way. The cost, that an outage looks like "nothing fits" and the email is marked processed, is accepted under the HLD tenet *classify once over classify eventually*. |
 | HTTP client | Synchronous `httpx2.Client` with an injectable `transport` | `requests`; async client; the Google API client's HTTP stack | Synchronous fits a single-threaded poll loop. `MockTransport` lets tests assert the exact request body OpenRouter would receive (TESTING.md). |
 | Label validation timing | At classifier construction and again at config load | Only at request time | Fail fast: a config Jev cannot represent unambiguously should stop the agent before it touches Gmail or spends money. |
@@ -133,14 +133,14 @@ It runs in the `JevClassifier` constructor and is also called by `config.py` whe
 
 ### Resolved
 1. ✅ The README now states that descriptions are the criteria and that label names appear in the question text; its earlier claim that Jev never sees label names was a conflation with question ids.
-2. ✅ A transport or endpoint failure returns `[]` from `classify_email`, the same as "no label fits". The agent-runtime segment marks the email processed either way, per the HLD tenet *classify once over classify eventually*. Distinguishing the two would only matter if that tenet were reversed.
+2. ✅ An empty API key is rejected at construction, and configuration rejects it at import, so a missing key fails before any OAuth prompt instead of as HTTP 401 on the first email.
+3. ✅ A numeric `Retry-After` header sets the single retry's delay, capped at 60 seconds; backoff across repeated failures belongs to the poll loop.
+4. ✅ Booleans are not probabilities; `_probability` treats them as absent.
+5. ✅ Thresholds are tuned from DEBUG logs of real mail; the hand-labeled sweep is not going to be run. The approach remains in the migration plan in git history if that ever changes.
+6. ✅ A transport or endpoint failure returns `[]` from `classify_email`, the same as "no label fits". The agent-runtime segment marks the email processed either way, per the HLD tenet *classify once over classify eventually*. Distinguishing the two would only matter if that tenet were reversed.
 
 ### Deferred
-1. Who owns the 5000-character body cap and text reduction: this segment, gmail-intake, or both? The number predates Jev and was sized for a chat LLM's token budget (gmail-intake LLD Deferred 9).
-2. Should the constructor reject a missing or empty API key so the agent fails at startup rather than on the first email with HTTP 401?
-3. Should 429 responses honor `Retry-After`, and should the retry delay back off?
-4. `_probability` accepts booleans as 1.0 and 0.0. Reject or coerce explicitly?
-5. The thresholds were never measured: the planned precision/recall sweep over hand-labeled mail was skipped and its scripts removed. Decide whether to run that measurement (the approach is recorded in the migration plan in git history) or to keep tuning from DEBUG logs.
+1. Who owns the 5000-character body cap and text reduction: this segment, gmail-intake, or both? The number predates Jev and was sized for a chat LLM's token budget (gmail-intake LLD Deferred 4).
 
 ## References
 

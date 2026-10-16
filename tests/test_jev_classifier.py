@@ -7,6 +7,7 @@ OpenRouter would receive is asserted exactly.
 
 import json
 import logging
+from unittest.mock import patch
 
 import httpx2 as httpx
 import pytest
@@ -230,6 +231,17 @@ class TestSelectLabels:
         assert select_labels({"is_Finance": {"noul": 1}}, LABELS, 0.7, 0.5) == [
             "Finance"
         ]
+        # booleans are not probabilities
+        assert select_labels({"is_Finance": {"noul": True}}, LABELS, 0.7, 0.5) == []
+        assert (
+            select_labels(
+                _answers(0.1, 0.1, 0.1, choice="Finance", confidence=True),
+                LABELS,
+                0.7,
+                0.5,
+            )
+            == []
+        )
 
 
 @pytest.mark.unit
@@ -320,6 +332,42 @@ class TestJevClassifierHttp:
         assert _classifier(handler).classify_email(email) == ["Finance"]
         assert len(calls) == 2
 
+    # @spec DECISION-HTTP-003
+    def test_retry_after_header_sets_the_retry_delay(self, email):
+        calls = []
+
+        def handler(request):
+            calls.append(1)
+            if len(calls) == 1:
+                return httpx.Response(
+                    429, json={"error": "busy"}, headers={"Retry-After": "3"}
+                )
+            return httpx.Response(200, json=_response_body())
+
+        with patch("jev_classifier.time.sleep") as sleep:
+            assert _classifier(handler, retry_delay_seconds=1.0).classify_email(
+                email
+            ) == ["Finance"]
+        sleep.assert_called_once_with(3.0)
+
+    # @spec DECISION-HTTP-003
+    def test_retry_after_is_capped_and_non_numeric_values_fall_back(self, email):
+        for header, expected in (
+            ("9999", 60.0),
+            ("Thu, 01 Jan 2026 00:00:00 GMT", 1.0),
+        ):
+            calls = []
+
+            def handler(request, header=header):
+                calls.append(1)
+                if len(calls) == 1:
+                    return httpx.Response(503, headers={"Retry-After": header})
+                return httpx.Response(200, json=_response_body())
+
+            with patch("jev_classifier.time.sleep") as sleep:
+                _classifier(handler, retry_delay_seconds=1.0).classify_email(email)
+            sleep.assert_called_once_with(expected)
+
     # @spec DECISION-HTTP-004, DECISION-HTTP-008
     def test_client_error_is_not_retried_and_raises_from_decide(self, email):
         calls = []
@@ -353,6 +401,11 @@ class TestJevClassifierHttp:
             == []
         )
         assert "malformed" in caplog.text
+
+    # @spec DECISION-CFG-006
+    def test_empty_api_key_fails_at_construction(self):
+        with pytest.raises(ValueError, match="API key"):
+            _classifier(lambda r: httpx.Response(200), api_key="")
 
     # @spec DECISION-CFG-005
     def test_invalid_label_config_fails_at_construction(self):

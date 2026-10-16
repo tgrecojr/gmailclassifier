@@ -20,11 +20,11 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 - [x] **AGENT-CFG-012**: The agent shall read the Gmail credentials path (default `credentials.json`) and token path (default `token.json`) from the environment and shall request only the `https://www.googleapis.com/auth/gmail.modify` scope.
 - [x] **AGENT-CFG-013**: The agent shall treat `GMAIL_HEADLESS_MODE`, `REMOVE_FROM_INBOX`, and `DRY_RUN` as true only when the value equals `true` case-insensitively, with defaults of false, true, and false respectively.
 - [x] **AGENT-CFG-014**: The agent shall read `POLL_INTERVAL_SECONDS` (default 60), `MAX_EMAILS_PER_POLL` (default 10), `STATE_RETENTION_DAYS` (default 30) as integers, `STATE_FILE` (default `.email_state.json`), and `LOG_LEVEL` (default `INFO`) from the environment.
-- [x] **AGENT-CFG-015**: The agent shall read `OPENROUTER_API_KEY` from the environment as the bearer token for the decisions endpoint; an unset or blank key is not detected at import and surfaces on the first request.
+- [x] **AGENT-CFG-015**: The agent shall read `OPENROUTER_API_KEY` from the environment as the bearer token for the decisions endpoint; if it is unset or blank, configuration shall print a hint and raise a value error at import, so the process does not start.
 
 ## Startup
 
-- [x] **AGENT-INIT-001**: When the agent is constructed, it shall construct the Gmail client with the configured credentials path, token path, scopes, and headless flag, so Gmail authentication completes before anything else.
+- [x] **AGENT-INIT-001**: When the agent is constructed, it shall construct the Jev classifier first and only then the Gmail client (with the configured credentials path, token path, scopes, and headless flag), so an invalid label set or key fails before any OAuth prompt or token refresh.
 - [x] **AGENT-INIT-002**: When the agent is constructed, it shall construct the Jev classifier with the configured API key, labels, label descriptions, model, label threshold, fallback confidence, and timeout.
 - [x] **AGENT-INIT-003**: When the agent is constructed with dry run off, it shall ensure each configured label exists in Gmail, in configured order, and keep a map from label name to Gmail label id, omitting any label whose creation returned no id.
 - [x] **AGENT-INIT-004**: Where a review label is configured and dry run is off, the agent shall ensure the review label exists in Gmail at construction and keep its id.
