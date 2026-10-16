@@ -25,6 +25,7 @@ A single long-running agent that polls a Gmail inbox for unread messages, asks J
 - `uv run pytest tests/ -m unit` — run the unit tests (coverage is on by default via pyproject)
 - `uv run flake8 . && uv run black --check .` — lint and format check
 - `docker compose up -d` — run the published image with mounted credentials and a `./data` volume
+- `uv run python scripts/check_coherence.py` — LID arrow coherence check (references, citations, markers, drift, orphans); exits 1 on a hard finding
 
 ## Architecture
 
@@ -101,3 +102,9 @@ Annotate code and tests with `@spec` comments citing EARS IDs:
 ```
 
 Place the annotation at the *entry point of the behavior's implementation graph* — the topmost function or module owning the specified behavior, not every helper. When a behavior spans multiple subsystems, annotate at the entry point in each subsystem. Tests follow the same rule: annotate the test that directly exercises the spec, not every inner assertion. In YAML workflows and the Dockerfile, use `# @spec OPS-...` comments.
+
+## LID Tooling
+
+Declared project-local scripts that LID skills invoke instead of their in-prompt fallbacks. The listed script is authoritative for the deterministic checks it performs.
+
+- **Coherence check**: `scripts/check_coherence.py` — run with `uv run python scripts/check_coherence.py`. Checks reference coherence (arrow-doc paths, spec IDs, line ranges), code and test citations per spec, `[ ]` markers, reverse orphans and unannotated tests, and orphan docs or code files. Exit status 1 on a hard finding. Specs verified by running rather than by unit tests (see the HLD) show up only in the informational coverage section.

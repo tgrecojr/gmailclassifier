@@ -4,7 +4,7 @@ Load settings, wire the Gmail client and Jev classifier, poll on an interval, an
 
 ## Status
 
-**OK** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 38 specs implemented and annotated; the CLI and import-time specs are verified by running (HLD: verified by running).
+**OK** — last audited 2026-10-16 (git SHA `7dbad5fcde9574b4f28a19ba608695cac23e7ef5`). All 38 specs implemented and annotated; the CLI and import-time specs are verified by running (HLD: verified by running).
 
 ## References
 

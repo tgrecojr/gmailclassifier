@@ -4,7 +4,7 @@ Persist the ledger of processed email IDs, migrate older file formats, and prune
 
 ## Status
 
-**OK** — last audited 2026-10-14 (git SHA `43adeb7ea7982a4e0b108d848355219d2c7f19dc`). All 15 specs implemented, annotated in code, and cited by tests.
+**OK** — last audited 2026-10-16 (git SHA `7dbad5fcde9574b4f28a19ba608695cac23e7ef5`). All 15 specs implemented, annotated in code, and cited by tests.
 
 ## References
 
