@@ -41,7 +41,7 @@ On any of these errors the module prints the error and a one-line hint, then re-
 
 | Setting | Default | Parsing |
 |---|---|---|
-| `OPENROUTER_API_KEY` | none | raw string; absence is not detected at startup |
+| `OPENROUTER_API_KEY` | none | stripped string; unset or blank fails at import with a printed hint |
 | `JEV_MODEL` | `typesafe/jev-1.13` | blank falls back to default |
 | `JEV_LABEL_THRESHOLD` | 0.7 | float, must be in [0, 1] |
 | `JEV_FALLBACK_CONFIDENCE` | 0.5 | float, must be in [0, 1] |
@@ -66,8 +66,8 @@ An out-of-range float raises `ValueError("<NAME> must be between <low> and <high
 `EmailClassifierAgent.__init__`, in order:
 
 1. Read `DRY_RUN`.
-2. Construct `GmailClient` with the credential and token paths, scopes, and headless flag. Authentication happens here, so an OAuth prompt or token refresh precedes everything else.
-3. Construct `JevClassifier` with the API key, labels, descriptions, model, both thresholds, and timeout. Label validation runs again inside.
+2. Construct `JevClassifier` with the API key, labels, descriptions, model, both thresholds, and timeout. Label and key validation run inside; nothing is sent. Building it first means bad configuration fails before any Gmail interaction.
+3. Construct `GmailClient` with the credential and token paths, scopes, and headless flag. Authentication happens here, including any OAuth prompt or token refresh.
 4. Ensure Gmail labels: in dry run, none are created and the name-to-id map is empty. Otherwise each configured label is ensured in order and its id kept; a label whose creation failed is left out of the map.
 5. Where `JEV_REVIEW_LABEL` is set and dry run is off, ensure that label too and keep its id.
 6. Load the ledger and prune it (processed-state).
@@ -138,21 +138,20 @@ The ledger is consulted inside `process_email`, after gmail-intake has already f
 | Error backoff in the loop | Exponential backoff on consecutive failed cycles: the sleep doubles from the poll interval up to ten times the interval, and resets after a successful cycle | Sleep the normal interval every time (today's code); immediate retry | A failing dependency (Gmail or OpenRouter down) should be hit less often the longer it stays down, not every interval. Ten times the interval caps the wait at ten minutes with the default 60-second poll. |
 | Logging destination | stdout, configurable level, CLI flag over environment | File logging; structured JSON | Logs are written to the console so containers and systemd capture them natively (README "Logging"). |
 | Concurrency | One synchronous loop, one instance | Threads per message; multiple replicas | Multiple instances would race on the same unread mail and the ledger; raise `MAX_EMAILS_PER_POLL` instead (DEPLOYMENT "Scaling Considerations"). |
-| Boolean parsing | Only the literal `true` (any case) is true | Accept `1`, `yes`, `on`; strict `true`/`false` with error | Not a deliberate choice; the first implementation stuck. The cost is that `yes` or `1` is silently false. Whether to widen or to reject unknown values is Deferred 7. |
+| Boolean parsing | Only the literal `true` (any case) is true | Accept `1`, `yes`, `on`; strict `true`/`false` with error | Not a deliberate choice; the first implementation stuck. The cost is that `yes` or `1` is silently false. Whether to widen or to reject unknown values is Deferred 5. |
 
 ## Open Questions & Future Decisions
 
 ### Resolved
 1. ✅ **Mark-processed policy on failure.** An email whose Jev call or label write failed is marked processed, left in the inbox (under the review label when configured), and not retried within the retention window. Settled by the HLD tenet *classify once over classify eventually*: no email is ever sent to Jev twice, at the accepted cost that a transient outage skips mail. Reversing this would require jev-decision to distinguish failure from "no labels", gmail-actions to report write failures, and possibly processed-state to record an outcome per entry.
+2. ✅ A blank `OPENROUTER_API_KEY` fails at import with a printed hint, and the classifier is constructed before the Gmail client, so no configuration error ever reaches an OAuth prompt.
 
 ### Deferred
 1. Should `process_email` return "handled" consistently, or should the loop report counts by outcome (labeled, review, skipped, failed)?
 2. Handle SIGTERM so `docker stop` ends the loop gracefully instead of killing the process mid-write. Related: a keyboard interrupt that arrives during the failure-path sleep escapes `run_continuous` (the handler is outside its own `except`), so `main` ends the process without the loop's own "stopped" log; exit status is still 0.
 3. Check the ledger before downloading full message bodies. Requires gmail-intake to expose listed ids before fetching details (cascades into gmail-intake).
-4. Detect a missing or empty `OPENROUTER_API_KEY` at startup, before Gmail authentication, instead of on the first email.
-5. Wrap the integer settings with the same ranged error message the float settings get.
-6. Should Gmail authentication happen after the classifier is constructed, so a bad label set or key fails before an OAuth prompt?
-7. Boolean settings accept only the literal `true`. Widen to `1`/`yes`/`on`, or reject any other value loudly?
+4. Wrap the integer settings with the same ranged error message the float settings get.
+5. Boolean settings accept only the literal `true`. Widen to `1`/`yes`/`on`, or reject any other value loudly?
 
 ## References
 

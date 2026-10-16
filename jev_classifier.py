@@ -36,6 +36,7 @@ NONE_OPTION = "None"
 BODY_MAX_CHARS = 5000
 RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 MAX_ATTEMPTS = 2
+MAX_RETRY_AFTER_SECONDS = 60.0
 
 _KEY_UNSAFE = re.compile(r"[^A-Za-z0-9_]+")
 
@@ -92,7 +93,10 @@ def build_questions(labels: list[str], descriptions: dict[str, str]) -> dict:
 
 
 def _probability(value) -> float | None:
-    return float(value) if isinstance(value, (int, float)) else None
+    """A numeric probability, or None. Booleans are not probabilities."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
 
 
 # @spec DECISION-SEL-001, DECISION-SEL-002, DECISION-SEL-003, DECISION-SEL-004
@@ -177,6 +181,8 @@ class JevClassifier:
         retry_delay_seconds: float = 1.0,
         transport: httpx.BaseTransport | None = None,
     ):
+        if not api_key or not api_key.strip():
+            raise ValueError("OpenRouter API key is empty")
         validate_labels(labels, label_descriptions)
         self.labels = list(labels)
         self.model = model
@@ -201,6 +207,14 @@ class JevClassifier:
         )
 
     # @spec DECISION-HTTP-002, DECISION-HTTP-003, DECISION-HTTP-004
+    def _retry_delay(self, response: httpx.Response) -> float:
+        """A numeric Retry-After header wins (capped); otherwise the fixed delay."""
+        try:
+            seconds = float(response.headers.get("Retry-After", ""))
+        except ValueError:
+            return self.retry_delay_seconds
+        return min(max(seconds, 0.0), MAX_RETRY_AFTER_SECONDS)
+
     def _post(self, payload: dict) -> httpx.Response:
         """POST with one retry on transport errors and retryable statuses."""
         for attempt in range(1, MAX_ATTEMPTS + 1):
@@ -213,10 +227,12 @@ class JevClassifier:
                 time.sleep(self.retry_delay_seconds)
                 continue
             if response.status_code in RETRYABLE_STATUSES and attempt < MAX_ATTEMPTS:
+                delay = self._retry_delay(response)
                 logger.warning(
-                    f"{self.provider_name} answered {response.status_code}; retrying once"
+                    f"{self.provider_name} answered {response.status_code}; "
+                    f"retrying once in {delay:g}s"
                 )
-                time.sleep(self.retry_delay_seconds)
+                time.sleep(delay)
                 continue
             if response.status_code >= 400:
                 raise JevRequestError(

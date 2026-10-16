@@ -21,14 +21,14 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 - [x] **DECISION-SEL-001**: When selecting labels from Jev answers, the classifier shall select every configured label whose Noul probability is numeric and at or above the label threshold, preserving configured order.
 - [x] **DECISION-SEL-002**: When no Noul reaches the label threshold, the classifier shall select the Choice answer's label if that label is one of the configured labels and the Choice confidence is numeric and at or above the fallback confidence.
 - [x] **DECISION-SEL-003**: When no Noul reaches the label threshold and the Choice answer is `None`, is below the fallback confidence, or names a label outside the configured set, the classifier shall select no labels.
-- [x] **DECISION-SEL-004**: When a Jev answer is missing, is not an object, or carries a non-numeric probability or confidence, the classifier shall treat that answer as absent rather than failing.
+- [x] **DECISION-SEL-004**: When a Jev answer is missing, is not an object, or carries a probability or confidence that is not a number (booleans included), the classifier shall treat that answer as absent rather than failing.
 - [x] **DECISION-SEL-005**: The classifier shall apply the label threshold and fallback confidence it was constructed with (defaults 0.7 and 0.5) to every selection.
 
 ## Transport and Response
 
 - [x] **DECISION-HTTP-001**: The classifier shall apply its configured timeout (default 30 seconds) to every decision request.
 - [x] **DECISION-HTTP-002**: If a decision request fails with a transport error (including a timeout), then the classifier shall wait the configured retry delay and retry once; if the retry also fails, it shall raise a request error from `decide`.
-- [x] **DECISION-HTTP-003**: If a decision request returns HTTP 429, 500, 502, 503, or 504, then the classifier shall wait the configured retry delay and retry once before treating a repeated status as a failure.
+- [x] **DECISION-HTTP-003**: If a decision request returns HTTP 429, 500, 502, 503, or 504, then the classifier shall retry once, waiting the number of seconds in a numeric `Retry-After` header when one is present (capped at 60 seconds) and otherwise the configured retry delay, before treating a repeated status as a failure.
 - [x] **DECISION-HTTP-004**: If a decision request returns any other HTTP status of 400 or above, then the classifier shall raise a request error carrying the status and the first 300 characters of the response body, without retrying.
 - [x] **DECISION-HTTP-005**: If a decision response body is not valid JSON, then the classifier shall raise a request error from `decide`.
 - [x] **DECISION-HTTP-006**: If a decision response lacks an `answers` object, then the classifier shall raise a request error from `decide`.
@@ -43,6 +43,7 @@ Status markers: `[x]` observed working in current code, `[ ]` specified but brok
 - [x] **DECISION-CFG-003**: If a configured label is literally `None`, then label validation shall raise a value error (the name is reserved for the Choice escape option).
 - [x] **DECISION-CFG-004**: If two configured labels normalize to the same question key, then label validation shall raise a value error.
 - [x] **DECISION-CFG-005**: When a classifier is constructed, it shall run label validation before building questions or an HTTP client, so an invalid label set fails at construction.
+- [x] **DECISION-CFG-006**: If a classifier is constructed with an empty API key, then construction shall raise a value error before any HTTP client is built.
 
 ## Result Logging
 

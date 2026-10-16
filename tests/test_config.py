@@ -131,6 +131,13 @@ class TestJevSettings:
         config = reload_config(OPENROUTER_API_KEY="sk-or-v1-test")
         assert config.OPENROUTER_API_KEY == "sk-or-v1-test"
 
+    # @spec AGENT-CFG-015
+    @pytest.mark.parametrize("value", ["", "   "])
+    def test_blank_api_key_fails_at_import(self, reload_config, value, capsys):
+        with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+            reload_config(OPENROUTER_API_KEY=value)
+        assert "OPENROUTER_API_KEY" in capsys.readouterr().out
+
     # @spec AGENT-CFG-009, AGENT-CFG-011, AGENT-CFG-013
     def test_overrides(self, reload_config):
         config = reload_config(

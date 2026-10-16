@@ -84,8 +84,13 @@ except (FileNotFoundError, ValueError) as e:
 # OpenRouter API Configuration
 # @spec AGENT-CFG-015
 # OPENROUTER_API_KEY is sent as the bearer token to OpenRouter's decisions
-# endpoint (jev_classifier.OPENROUTER_DECISIONS_URL).
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+# endpoint (jev_classifier.OPENROUTER_DECISIONS_URL). Fail at import rather
+# than with an HTTP 401 on the first email.
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
+if not OPENROUTER_API_KEY:
+    print("Error: OPENROUTER_API_KEY is not set.")
+    print("Add it to the environment (see the example env file) and restart.")
+    raise ValueError("OPENROUTER_API_KEY must be set")
 
 # Jev (TypeSafe decisions model) Configuration
 # @spec AGENT-CFG-009, AGENT-CFG-010, AGENT-CFG-011

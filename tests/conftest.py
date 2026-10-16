@@ -46,6 +46,8 @@ def pytest_configure(config):
             indent=2,
         )
     os.environ["CLASSIFIER_CONFIG_PATH"] = path
+    # config.py refuses to import without a key; tests never send a real request
+    os.environ.setdefault("OPENROUTER_API_KEY", "sk-or-v1-test-key")
 
 
 def pytest_unconfigure(config):

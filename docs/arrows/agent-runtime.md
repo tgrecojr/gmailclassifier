@@ -33,7 +33,7 @@ Load settings, wire the Gmail client and Jev classifier, poll on an interval, an
 
 **Key Components:**
 1. `config.py` — reads the environment file and `classifier_config.json` at import, validates shapes and ranges, and exposes module-level constants. A bad config stops the process before anything else runs.
-2. `EmailClassifierAgent.__init__` — constructs the Gmail client (which authenticates), the Jev classifier, ensures Gmail labels exist, and loads the ledger.
+2. `EmailClassifierAgent.__init__` — constructs the Jev classifier (configuration-only, fails fast), then the Gmail client (which authenticates), ensures Gmail labels exist, and loads the ledger.
 3. `process_email` — the per-email policy: skip if in ledger; classify; dry-run short-circuit; unlabeled path; label and archive; mark processed.
 4. `run_continuous` / `_poll_once` — the poll loop: prune ledger, fetch, process, sleep; survives any exception by sleeping with exponential backoff and retrying.
 5. `main.py` — CLI flag for log level, stdout logging, startup banner, exit codes.
@@ -56,10 +56,9 @@ Load settings, wire the Gmail client and Jev classifier, poll on an interval, an
 2. **The return value and the poll summary disagree with the ledger** — `process_email` returns `False` for an email it handled via the unlabeled path (`:170`) but `True` for one that was already processed (`:152`) or whose predicted labels had no ids (`:196`). The loop's "Processed N out of M" line (`:248`) therefore undercounts handled mail.
 3. **The ledger is checked after the full message is fetched** — gmail-intake downloads every listed message in `format="full"` before `process_email` consults the ledger (`:150`). Mail that stays unread in the inbox after processing (unlabeled mail, or everything when `REMOVE_FROM_INBOX=false`) is re-downloaded every poll until it is read or expires from the list window.
 4. **No SIGTERM handling** — only `KeyboardInterrupt` (SIGINT) is caught (`:270-272`, `main.py:72-74`). `docker stop` sends SIGTERM, which Python does not translate, so the process dies wherever it is, possibly mid-`save_state`.
-5. **Startup order is Gmail first, Jev second** — `__init__` authenticates to Gmail (`:25-30`) before constructing the classifier (`:32-40`). A missing or bad OpenRouter key is not detected at startup at all; it surfaces as HTTP 401 on the first email.
-6. **Config is evaluated at import** — `config.py:76-82` loads and validates the label file when the module is imported, printing and re-raising on failure. Tests need `conftest.py` to point `CLASSIFIER_CONFIG_PATH` at a temp file before collection.
-7. **Boolean settings accept only the literal `true`** — `config.py:107-108, 119` compare `.lower() == "true"`. `yes`, `1`, and `on` are silently false.
-8. **Integer settings have no guard** — `POLL_INTERVAL_SECONDS`, `MAX_EMAILS_PER_POLL`, `STATE_RETENTION_DAYS` go straight through `int()` (`config.py:112-115`); a non-numeric value fails at import with a bare `ValueError`, unlike the `JEV_*` floats which get a ranged message.
+5. **Config is evaluated at import** — `config.py:76-82` loads and validates the label file when the module is imported, printing and re-raising on failure. Tests need `conftest.py` to point `CLASSIFIER_CONFIG_PATH` at a temp file before collection.
+6. **Boolean settings accept only the literal `true`** — `config.py:107-108, 119` compare `.lower() == "true"`. `yes`, `1`, and `on` are silently false.
+7. **Integer settings have no guard** — `POLL_INTERVAL_SECONDS`, `MAX_EMAILS_PER_POLL`, `STATE_RETENTION_DAYS` go straight through `int()` (`config.py:112-115`); a non-numeric value fails at import with a bare `ValueError`, unlike the `JEV_*` floats which get a ranged message.
 
 ## Work Required
 
@@ -72,5 +71,4 @@ _None identified during mapping._
 ### Nice to Have
 2. Make `process_email`'s return value mean "handled" consistently, or report counts by outcome (finding 2).
 3. Check the ledger before fetching full message bodies, which needs gmail-intake to expose ids before details (finding 3; cascades into gmail-intake).
-4. Validate `OPENROUTER_API_KEY` presence at startup (finding 5).
-5. Range-check or at least message-wrap the integer settings (finding 8).
+4. Range-check or at least message-wrap the integer settings (finding 7).

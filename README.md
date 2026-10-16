@@ -43,7 +43,7 @@ Jev scores each label by its *description*; the label name only appears in the q
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-That is all. The model defaults to `typesafe/jev-1.13` and requests go to OpenRouter's decisions endpoint (`https://openrouter.ai/api/alpha/decisions`). The startup banner logs the endpoint and model, and `uv run python verify_setup.py` sends one tiny decision (about $0.00002) to prove the key and model work end to end.
+That is all; the agent refuses to start without it. The model defaults to `typesafe/jev-1.13` and requests go to OpenRouter's decisions endpoint (`https://openrouter.ai/api/alpha/decisions`). The startup banner logs the endpoint and model, and `uv run python verify_setup.py` sends one tiny decision (about $0.00002) to prove the key and model work end to end.
 
 ### Model and Thresholds
 
@@ -58,7 +58,7 @@ JEV_REVIEW_LABEL=
 
 - `JEV_MODEL`: pinned to a specific Jev version on purpose. `~typesafe/jev-latest` is a moving alias and decision behaviour can shift between versions, so bump deliberately and watch the results for a few days.
 - `JEV_LABEL_THRESHOLD` / `JEV_FALLBACK_CONFIDENCE`: see [How labels are chosen](#how-labels-are-chosen).
-- `JEV_TIMEOUT_SECONDS`: per request. Timeouts, connection errors, 429 and 5xx are retried once.
+- `JEV_TIMEOUT_SECONDS`: per request. Timeouts, connection errors, 429 and 5xx are retried once, honoring a numeric `Retry-After` header up to 60 seconds.
 - `JEV_REVIEW_LABEL`: optional Gmail label for emails that clear neither threshold, so they stay visible in the inbox instead of being silently marked processed. Empty (the default) applies no label.
 
 ## How labels are chosen
@@ -327,7 +327,7 @@ At `DEBUG`, each classification also logs the raw answers (per-label probabiliti
 
 ## Error Handling
 
-- Timeouts, connection errors, 429 and 5xx responses are retried once; a second failure yields no labels and the email is marked processed
+- Timeouts, connection errors, 429 and 5xx responses are retried once (waiting for a numeric `Retry-After` when the server sends one, up to 60 seconds); a second failure yields no labels and the email is marked processed
 - Any other 4xx means the request itself is wrong; it is logged with the response body and yields no labels
 - Graceful shutdown on keyboard interrupt (Ctrl+C)
 - Continues operation if individual emails fail to process
