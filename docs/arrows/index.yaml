@@ -1,5 +1,5 @@
 schema_version: 2
-last_updated: 2026-10-14
+last_updated: 2026-10-16
 
 # Taxonomy groups segments by stage on an email's path through the agent.
 # Purely organizational; the design tree below is flat (depth-2).
@@ -17,8 +17,8 @@ arrows:
     status: OK
     parent: null
     sampled: 2026-10-14
-    audited: 2026-10-14
-    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
+    audited: 2026-10-16
+    audited_sha: 7dbad5fcde9574b4f28a19ba608695cac23e7ef5
     blocks: []
     blockedBy: []
     detail: gmail-intake.md
@@ -29,8 +29,8 @@ arrows:
     status: OK
     parent: null
     sampled: 2026-10-14
-    audited: 2026-10-14
-    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
+    audited: 2026-10-16
+    audited_sha: 7dbad5fcde9574b4f28a19ba608695cac23e7ef5
     blocks: []
     blockedBy: []
     detail: jev-decision.md
@@ -41,8 +41,8 @@ arrows:
     status: OK
     parent: null
     sampled: 2026-10-14
-    audited: 2026-10-14
-    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
+    audited: 2026-10-16
+    audited_sha: 7dbad5fcde9574b4f28a19ba608695cac23e7ef5
     blocks: []
     blockedBy: []
     detail: gmail-actions.md
@@ -53,8 +53,8 @@ arrows:
     status: OK
     parent: null
     sampled: 2026-10-14
-    audited: 2026-10-14
-    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
+    audited: 2026-10-16
+    audited_sha: 7dbad5fcde9574b4f28a19ba608695cac23e7ef5
     blocks: []
     blockedBy: []
     detail: processed-state.md
@@ -65,8 +65,8 @@ arrows:
     status: OK
     parent: null
     sampled: 2026-10-14
-    audited: 2026-10-14
-    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
+    audited: 2026-10-16
+    audited_sha: 7dbad5fcde9574b4f28a19ba608695cac23e7ef5
     blocks: []
     blockedBy: []
     detail: agent-runtime.md
@@ -77,8 +77,8 @@ arrows:
     status: OK
     parent: null
     sampled: 2026-10-14
-    audited: 2026-10-14
-    audited_sha: 43adeb7ea7982a4e0b108d848355219d2c7f19dc
+    audited: 2026-10-16
+    audited_sha: 7dbad5fcde9574b4f28a19ba608695cac23e7ef5
     blocks: []
     blockedBy: []
     detail: operations.md

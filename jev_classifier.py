@@ -167,7 +167,8 @@ def log_classification_result(email: dict, labels: list[str], provider: str):
 class JevClassifier:
     """Classify emails with Jev through the OpenRouter decisions endpoint."""
 
-    # @spec DECISION-CFG-005, DECISION-SEL-005, DECISION-HTTP-001, DECISION-HTTP-009, DECISION-REQ-009
+    # @spec DECISION-CFG-005, DECISION-CFG-006, DECISION-SEL-005, DECISION-HTTP-001,
+    # @spec DECISION-HTTP-009, DECISION-REQ-009
     def __init__(
         self,
         api_key: str,
