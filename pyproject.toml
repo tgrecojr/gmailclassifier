@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "AI-powered Gmail email classifier that automatically reads, categorizes, and labels Gmail emails via OpenRouter."
 readme = "README.md"
 requires-python = ">=3.14"
+license = "MIT"
 dependencies = [
     "google-auth-oauthlib>=1.0.0",
     "google-auth-httplib2>=0.1.0",

@@ -411,11 +411,11 @@ Jev on OpenRouter is priced per input token with free output: about $0.042 per m
 
 ## License
 
-This project is provided as-is for personal use.
+Released under the [MIT License](LICENSE).
 
 ## Contributing
 
-Feel free to submit issues, feature requests, or pull requests.
+Issues and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ## Support
 
